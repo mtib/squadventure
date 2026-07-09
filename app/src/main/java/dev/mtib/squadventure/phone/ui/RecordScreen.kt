@@ -1,0 +1,135 @@
+package dev.mtib.squadventure.phone.ui
+
+import android.Manifest
+import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import dev.mtib.squadventure.R
+import dev.mtib.squadventure.core.model.TransportMode
+import dev.mtib.squadventure.core.tracking.TrackingController
+import dev.mtib.squadventure.phone.TrackingService
+import dev.mtib.squadventure.phone.map.MapView
+
+@Composable
+fun RecordScreen() {
+    val context = LocalContext.current
+    val isTracking by TrackingController.isTracking.collectAsState()
+    val elapsedMs by TrackingController.elapsedMs.collectAsState()
+    val distanceMeters by TrackingController.distanceMeters.collectAsState()
+    val path by TrackingController.path.collectAsState()
+    val liveSquadratinhos by TrackingController.liveSquadratinhos.collectAsState()
+
+    var selectedMode by rememberSaveable { mutableStateOf(TransportMode.WALK) }
+    var pendingBackgroundRequest by remember { mutableStateOf(false) }
+
+    val backgroundPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        TrackingService.start(context, selectedMode)
+    }
+    val foregroundPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        val fineGranted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        when {
+            !fineGranted -> Toast.makeText(context, context.getString(R.string.perm_denied), Toast.LENGTH_SHORT).show()
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> pendingBackgroundRequest = true
+            else -> TrackingService.start(context, selectedMode)
+        }
+    }
+
+    if (pendingBackgroundRequest) {
+        AlertDialog(
+            onDismissRequest = {
+                pendingBackgroundRequest = false
+                TrackingService.start(context, selectedMode)
+            },
+            text = { Text(stringResource(R.string.perm_background_rationale)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingBackgroundRequest = false
+                    backgroundPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                }) { Text(stringResource(R.string.action_ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    pendingBackgroundRequest = false
+                    TrackingService.start(context, selectedMode)
+                }) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+    }
+
+    if (isTracking) {
+        Column(Modifier.fillMaxSize()) {
+            MapView(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                routes = listOf(path),
+                focus = path.lastOrNull(),
+                showSquares = true,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                StatItem(stringResource(R.string.stat_duration), Format.duration(elapsedMs), Modifier.weight(1f))
+                StatItem(stringResource(R.string.stat_distance), Format.distance(distanceMeters), Modifier.weight(1f))
+                StatItem(stringResource(R.string.stat_squadratinhos), liveSquadratinhos.size.toString(), Modifier.weight(1f))
+            }
+            Button(
+                onClick = { TrackingService.stop(context) },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                Text(stringResource(R.string.record_stop))
+            }
+        }
+    } else {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(stringResource(R.string.record_pick_mode), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(16.dp))
+            TransportModeChips(
+                selected = selectedMode,
+                onSelect = { mode -> mode?.let { selectedMode = it } },
+            )
+            Spacer(Modifier.height(32.dp))
+            Button(onClick = {
+                val perms = buildList {
+                    add(Manifest.permission.ACCESS_FINE_LOCATION)
+                    add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        add(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
+                foregroundPermissionLauncher.launch(perms.toTypedArray())
+            }) {
+                Text(stringResource(R.string.record_start))
+            }
+        }
+    }
+}

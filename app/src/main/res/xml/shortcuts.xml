@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="start_activity"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_track"
+        android:shortcutShortLabel="@string/shortcut_new_short"
+        android:shortcutLongLabel="@string/shortcut_new_long">
+        <intent
+            android:action="dev.mtib.squadventure.START_ACTIVITY"
+            android:targetPackage="dev.mtib.squadventure"
+            android:targetClass="dev.mtib.squadventure.phone.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="import_gpx"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_track"
+        android:shortcutShortLabel="@string/shortcut_import_short"
+        android:shortcutLongLabel="@string/shortcut_import_long">
+        <intent
+            android:action="dev.mtib.squadventure.IMPORT_GPX"
+            android:targetPackage="dev.mtib.squadventure"
+            android:targetClass="dev.mtib.squadventure.phone.MainActivity" />
+    </shortcut>
+</shortcuts>

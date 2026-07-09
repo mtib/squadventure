@@ -1,0 +1,15 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:scaleX="1.0" android:scaleY="1.0">
+        <!-- 3x3 grid of squadrats; the diagonal cluster is "claimed" (green), corner accent amber. -->
+        <path android:fillColor="#5BD98A" android:pathData="M30,30h16v16h-16z" />
+        <path android:fillColor="#5BD98A" android:pathData="M48,48h16v16h-16z" />
+        <path android:fillColor="#5BD98A" android:pathData="M66,66h16v16h-16z" />
+        <path android:fillColor="#F5A623" android:pathData="M66,30h16v16h-16z" />
+        <path android:strokeColor="#2E4A3A" android:strokeWidth="1.5" android:fillColor="#00000000"
+            android:pathData="M30,30h52v52h-52z M48,30v52 M66,30v52 M30,48h52 M30,66h52" />
+    </group>
+</vector>

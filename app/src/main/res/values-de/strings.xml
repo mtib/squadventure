@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Squadventure</string>
+
+    <!-- Navigation -->
+    <string name="nav_map">Karte</string>
+    <string name="nav_history">Verlauf</string>
+    <string name="nav_record">Aufnehmen</string>
+    <string name="nav_back">Zurück</string>
+
+    <!-- Transport modes -->
+    <string name="mode_walk">Zu Fuß</string>
+    <string name="mode_bike">Fahrrad</string>
+    <string name="mode_car">Auto</string>
+    <string name="mode_both">Kombiniert</string>
+    <string name="mode_other">Andere</string>
+    <string name="filter_all">Alle</string>
+
+    <!-- Map -->
+    <string name="map_heatmap">Heatmap</string>
+    <string name="map_layer_squadrats">Squadrats</string>
+    <string name="map_layer_squadratinhos">Squadratinhos</string>
+    <string name="map_filter">Filter</string>
+
+    <!-- Stats -->
+    <string name="stat_squadrats">Quadrate</string>
+    <string name="stat_squadratinhos">Mini-Quadrate</string>
+    <string name="stat_distance">Distanz</string>
+    <string name="stat_duration">Dauer</string>
+    <string name="stat_yard">Yard</string>
+    <string name="stat_ubersquare">Max-Quadrat</string>
+    <string name="unit_km">km</string>
+
+    <!-- Record / active tracking -->
+    <string name="record_start">Start</string>
+    <string name="record_stop">Stopp</string>
+    <string name="record_pause">Pause</string>
+    <string name="record_resume">Fortsetzen</string>
+    <string name="record_pick_mode">Wie bist du unterwegs?</string>
+    <string name="tracking_channel_name">Aktivitätsaufzeichnung</string>
+    <string name="tracking_notification_title">Aktivität wird aufgezeichnet</string>
+    <string name="tracking_notification_text">%1$s · %2$s</string>
+
+    <!-- History -->
+    <string name="history_empty">Noch keine Aktivitäten. Nimm eine auf oder importiere eine GPX-Datei.</string>
+    <string name="history_import">GPX importieren</string>
+
+    <!-- Detail -->
+    <string name="detail_export">GPX exportieren</string>
+    <string name="detail_delete">Löschen</string>
+    <string name="detail_transport_mode">Fortbewegungsart</string>
+    <string name="detail_rename">Umbenennen</string>
+    <string name="delete_confirm">Diese Aktivität löschen?</string>
+    <string name="action_cancel">Abbrechen</string>
+    <string name="action_ok">OK</string>
+
+    <!-- Import / share target -->
+    <string name="import_duplicate">Bereits importiert (Duplikat)</string>
+    <string name="import_empty">Keine Trackpunkte in der Datei gefunden</string>
+    <string name="import_failed">GPX-Datei konnte nicht gelesen werden</string>
+    <plurals name="import_added">
+        <item quantity="one">%d Aktivität importiert</item>
+        <item quantity="other">%d Aktivitäten importiert</item>
+    </plurals>
+
+    <!-- Permissions -->
+    <string name="perm_location_rationale">Squadventure benötigt Standortzugriff, um deine Aktivität aufzuzeichnen.</string>
+    <string name="perm_background_rationale">Erlaube den Standortzugriff im Hintergrund, damit die Aufzeichnung bei ausgeschaltetem Bildschirm weiterläuft.</string>
+    <string name="perm_denied">Zum Aufzeichnen einer Aktivität ist die Standortberechtigung erforderlich.</string>
+
+    <!-- Widget -->
+    <string name="widget_description">Deine Quadrate und Distanz</string>
+    <string name="widget_this_week">diese Woche</string>
+    <string name="widget_style_title">Widget-Stil</string>
+
+    <!-- Shortcuts -->
+    <string name="shortcut_new_short">Aufnehmen</string>
+    <string name="shortcut_new_long">Aktivität starten</string>
+    <string name="shortcut_import_short">Import</string>
+    <string name="shortcut_import_long">GPX importieren</string>
+</resources>

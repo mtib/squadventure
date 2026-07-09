@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#000000</color>
+    <color name="graphite">#0A0F0C</color>
+    <color name="panel">#141B16</color>
+    <color name="squadrat">#5BD98A</color>
+    <color name="squadratinho">#F5A623</color>
+    <color name="trail">#7CC7FF</color>
+    <color name="ic_launcher_background">#0A0F0C</color>
+</resources>
