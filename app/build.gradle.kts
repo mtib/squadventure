@@ -13,10 +13,16 @@ android {
         applicationId = "dev.mtib.squadventure"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Ship only arm64 (real phones + the Apple-Silicon emulator); MapLibre's native lib is
+        // ~12MB per ABI, so this keeps the APK from carrying three unused copies.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     signingConfigs {
@@ -59,6 +65,12 @@ android {
         buildConfig = true
     }
 
+    androidResources {
+        // PMTiles is read with random-access byte-range seeks; if AAPT compresses it in the APK the
+        // offsets no longer line up and MapLibre's reader fails with "incorrect header check".
+        noCompress += "pmtiles"
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -86,6 +98,10 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.navigation:navigation-compose:2.8.5")
+
+    // Offline vector map. Renders a bundled PMTiles basemap with zero network (INTERNET permission
+    // is stripped in the manifest); MapLibre Native has no telemetry.
+    implementation("org.maplibre.gl:android-sdk:13.3.1")
 
     // Pure-Kotlin domain (tile math, metrics, GPX) is JVM-unit-testable — no device needed.
     testImplementation("junit:junit:4.13.2")

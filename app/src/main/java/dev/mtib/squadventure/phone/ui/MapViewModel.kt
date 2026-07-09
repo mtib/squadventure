@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 data class MapUiState(
     val claims: MapClaims = MapClaims(),
     val routes: List<List<TrackPoint>> = emptyList(),
-    val showHeatmap: Boolean = false,
+    val showHeatmap: Boolean = true,
     val filter: TransportMode? = null,
     val loading: Boolean = true,
 )

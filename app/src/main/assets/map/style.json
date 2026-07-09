@@ -1,0 +1,30 @@
+{
+  "version": 8,
+  "name": "Squadventure Dark",
+  "sources": {
+    "protomaps": {
+      "type": "vector",
+      "url": "pmtiles://asset://map/basemap.pmtiles",
+      "attribution": "© OpenStreetMap"
+    }
+  },
+  "layers": [
+    { "id": "background", "type": "background", "paint": { "background-color": "#05070a" } },
+    { "id": "earth", "type": "fill", "source": "protomaps", "source-layer": "earth",
+      "paint": { "fill-color": "#12181f" } },
+    { "id": "landcover", "type": "fill", "source": "protomaps", "source-layer": "landcover",
+      "paint": { "fill-color": "#161d24", "fill-opacity": 0.6 } },
+    { "id": "landuse", "type": "fill", "source": "protomaps", "source-layer": "landuse",
+      "paint": { "fill-color": "#19212a", "fill-opacity": 0.7 } },
+    { "id": "water", "type": "fill", "source": "protomaps", "source-layer": "water",
+      "paint": { "fill-color": "#0a2233" } },
+    { "id": "roads-minor", "type": "line", "source": "protomaps", "source-layer": "roads",
+      "filter": ["!in", "kind", "highway", "major_road"],
+      "paint": { "line-color": "#2a343d", "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.3, 12, 1.2] } },
+    { "id": "roads-major", "type": "line", "source": "protomaps", "source-layer": "roads",
+      "filter": ["in", "kind", "highway", "major_road"],
+      "paint": { "line-color": "#3a4650", "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.5, 12, 2.5] } },
+    { "id": "boundaries", "type": "line", "source": "protomaps", "source-layer": "boundaries",
+      "paint": { "line-color": "#3b3350", "line-width": 0.8, "line-dasharray": [3, 2] } }
+  ]
+}

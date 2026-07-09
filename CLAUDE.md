@@ -13,15 +13,30 @@ release CI, deterministic signing) is derived from `~/Code/android-local-transcr
 ## Non-negotiable: stays offline
 The app declares **no `INTERNET` permission** and `allowBackup="false"`. This is a product
 guarantee. Never add a networking library, analytics, crash reporting, map-tile SDK that fetches
-over the network, or the `INTERNET` permission. The world map is a **bundled low-poly vector**
-(`app/src/main/assets/world/`), rendered by our own Compose Canvas in Web Mercator — no online tiles.
-Location comes from `LocationManager` (GPS), **not** Play Services (which is a networked dependency).
+over the network, or the `INTERNET` permission (stripped in `AndroidManifest.xml` via
+`tools:node="remove"` — without it the app can open no sockets). MapLibre pulls in the read-only
+`ACCESS_NETWORK_STATE` / `ACCESS_WIFI_STATE` permissions (its `ConnectivityReceiver` crashes without
+them); those cannot transmit data, so they stay. The map is rendered by **MapLibre Native**
+(`org.maplibre.gl:android-sdk`) against a bundled offline **PMTiles** basemap
+(`app/src/main/assets/map/basemap.pmtiles` + `style.json`, global vector tiles z0-6) loaded via
+`asset://map/style.json` — no online tiles, no telemetry. App data (claimed squares, routes,
+heatmap, current-location marker) is drawn as MapLibre runtime GeoJSON sources/layers on top; see
+`phone/map/MapView.kt`. Location comes from `LocationManager` (GPS), **not** Play Services (which
+is a networked dependency).
 
 ## Stack / versions (source of truth: `app/build.gradle.kts`, `gradle/wrapper`)
-- Kotlin 2.0.21, Jetpack **Compose** (BOM 2024.10.01), AGP **8.7.3**, Gradle **8.11.1**.
+- Kotlin **2.2.10**, Jetpack **Compose** (BOM 2024.10.01), AGP **8.7.3**, Gradle **8.11.1**.
 - `compileSdk`/`targetSdk` **35**, `minSdk` **26**. App bytecode target **Java 17**.
 - **Build JDK: 21** (`gw21`). CI uses JDK 21. No version catalog — deps are inline in `app/build.gradle.kts`.
 - No native code / no ABI splits (unlike transcribe): a single universal APK.
+- Kotlin is pinned to **2.2.10** (not the older 2.0.21) **because `org.maplibre.gl:android-sdk:13.3.1`
+  hard-`requires kotlin-stdlib:2.2.10`** in its Gradle module metadata; a 2.0.x compiler fails with
+  "Module was compiled with an incompatible version of Kotlin". All three Kotlin plugins
+  (`kotlin.android`, `kotlin.plugin.compose`, `kotlin.plugin.serialization`) must stay on the same
+  version — the Compose compiler plugin is versioned identically to Kotlin. If you ever drop MapLibre
+  you can move back down.
+- The MapLibre AAR's manifest also adds `<uses-feature android:name="android.hardware.vulkan.version" android:required="true">`
+  and `ACCESS_WIFI_STATE` — revisit if targeting older/non-Vulkan devices.
 
 ## Build & test
 ```bash
@@ -49,7 +64,7 @@ core/                       platform-agnostic, JVM-unit-tested
 phone/                      Android UI + entry points
   MainActivity             single activity + Navigation Compose (map / history / active / detail)
   TrackingService          foreground service (foregroundServiceType=location), wake lock, notification, widget push
-  map/                     MapCanvas (Compose Canvas Mercator map), overlays (squares, route, heatmap)
+  map/MapView.kt           MapLibre Native MapView + runtime GeoJSON layers (squares, route, heatmap, location)
   StatsWidgetProvider      RemoteViews widget: squadrats / squadratinhos / km + "+N this week"
   CreateActivityShortcutActivity, ImportActivity (share target), ui/
 ```

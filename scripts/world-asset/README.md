@@ -1,49 +1,43 @@
-# World basemap asset
+# Offline basemap asset
 
-`app/src/main/assets/world/world_lowpoly.geojson` (coastlines) and
-`app/src/main/assets/world/world_lakes.geojson` (lakes) are the bundled world basemap used by
-`phone/map/WorldBasemap.kt`. Squadventure has no `INTERNET` permission and fetches no map tiles —
-these two files are the entire basemap.
+`app/src/main/assets/map/basemap.pmtiles` is the bundled offline vector basemap. MapLibre Native
+renders it (with `assets/map/style.json`) from a copy placed in internal storage at first launch —
+see `phone/map/MapView.kt`. The app has no `INTERNET` permission; this file is the whole map.
 
-## Source
+## Source & license
 
-[Natural Earth](https://www.naturalearthdata.com/) **10m** (1:10,000,000) physical vectors — the
-highest-detail Natural Earth scale — fetched from the `nvkelso/natural-earth-vector` GitHub mirror:
+[Protomaps](https://protomaps.com/) daily basemap build (vector tiles derived from **OpenStreetMap**),
+**ODbL** — attribution "© OpenStreetMap" is displayed by the map's attribution control (do not remove
+it). Builds: https://maps.protomaps.com/builds (dated `YYYYMMDD.pmtiles`).
 
-```
-https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_land.geojson
-https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_minor_islands.geojson
-https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_lakes.geojson
-```
+## Current tileset
 
-Land = `ne_10m_land` + `ne_10m_minor_islands` merged into `world_lowpoly.geojson`; lakes =
-`ne_10m_lakes` in `world_lakes.geojson`. Rounded to 5 decimals (~1 m) and minified (geometry only,
-no properties). Result: ~9.7 MB land + ~3.3 MB lakes ≈ **13 MB** total.
+Global, **zoom 0–6** (~43 MB). This is country/region level: it gives worldwide coverage and bearings
+within the ~50 MB budget, but **no city/street detail** (streets live at z12+). MapLibre overzooms it
+at high zoom, so a city looks coarse.
 
-10m is Natural Earth's finest resolution. Going meaningfully beyond it (toward a ~50 MB budget)
-would require OpenStreetMap-derived coastline/water polygons (much larger, shapefile → GeoJSON via
-GDAL), which is a separate pipeline not wired up here.
+## Regenerating / changing zoom & coverage
 
-## License
-
-Natural Earth data is **public domain**. Per
-[naturalearthdata.com/about/terms-of-use](https://www.naturalearthdata.com/about/terms-of-use/):
-"No permission is needed to use Natural Earth. Crediting the authors is unnecessary."
-
-## Regenerating
+Needs the [`pmtiles` CLI](https://github.com/protomaps/go-pmtiles/releases). `pmtiles extract` streams
+only the requested tiles from the remote build (HTTP range requests — no full-planet download).
 
 ```bash
-scripts/world-asset/generate.sh
+# Global overview (current):
+MAXZOOM=6 scripts/world-asset/generate.sh
+
+# Higher global zoom roughly doubles size per level (z7 ≈ ~85MB, over budget).
 ```
 
-Downloads the three 10m sources, rounds/minifies via `round_geojson.py` (which merges multiple
-inputs into one FeatureCollection and emits geometry `type` before `coordinates` so the on-device
-streaming parser can read type-first), and writes the two committed assets.
+**For walk/bike/city detail** (the levels users actually use), bundle a *regional* high-zoom extract
+and keep the global overview for country bearings — global city detail can't fit ~50 MB. Two ways:
 
-`WorldBasemap.kt` stream-parses both files with `android.util.JsonReader` (no full JSON tree in
-memory, so the ~13 MB load stays cheap) into per-polygon ring lists, and renders lakes in the
-sea/background color on top of land so large water bodies (Caspian Sea, Great Lakes, …) read as
-cut-outs.
+```bash
+# A regional extract at street zoom (example bbox around Denmark / Øresund):
+pmtiles extract https://build.protomaps.com/<YYYYMMDD>.pmtiles region.pmtiles \
+  --bbox=7.5,54.4,13.5,58.0 --maxzoom=14
+```
 
-To add faint country borders, also fetch `ne_10m_admin_0_countries.geojson` and render it as a
-separate line layer in `MapView` (borders are lines, not filled land).
+Then either (a) ship BOTH `basemap.pmtiles` (global z0–6) and `region.pmtiles` and add a second
+`vector` source + duplicated layers (min/max-zoom split) in `style.json`, or (b) if you only care
+about one region, ship just the regional extract. `basemap.pmtiles` must stay `noCompress` in
+`app/build.gradle.kts` (random-access reads).

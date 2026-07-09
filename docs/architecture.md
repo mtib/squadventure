@@ -27,11 +27,14 @@ A fully local Squadrats rework. Features, from the brief:
 ## Key decisions
 
 - **Zero network, bundled map.** Strict offline like `android-local-transcribe`: no `INTERNET`
-  permission. The world map is a **bundled low-poly vector** (Natural Earth land/country polygons as
-  GeoJSON in `assets/world/`) rendered by our own **Compose Canvas in Web Mercator**. Low-poly/not
-  terrain is fine and keeps the APK small. This unifies the coordinate system: the basemap, the square
-  overlay, the route, and the heatmap all project through `core/geo/WebMercator`, which is consistent
-  with the slippy-tile math squares are defined on.
+  permission. The world map is a **bundled offline PMTiles vector basemap**
+  (`assets/map/basemap.pmtiles`, global, z0-6, + `assets/map/style.json`) rendered by
+  **MapLibre Native** (`org.maplibre.gl:android-sdk`) via `asset://map/style.json` — no online
+  tiles, no telemetry. App data (squares, route, heatmap, current-location marker) is added as
+  runtime GeoJSON sources/layers on top of the style's own layers, using plain lat/lon; the
+  `core/geo/WebMercator`/`SlippyTile` normalized-`[0,1]²` projection is still the shared coordinate
+  system for squadrat/squadratinho tile math, but MapLibre — not our own canvas — now owns
+  projection/pan/zoom for rendering.
 - **Location via `LocationManager` (GPS)**, not FusedLocationProvider (Play Services is networked).
 - **No DI, plain files + kotlinx.serialization** (see `android-dev.md`).
 - **Domain logic is Android-free** under `core/` and JVM-unit-tested.
@@ -56,14 +59,18 @@ Foreground service (`foregroundServiceType=location`), owns a `GpsLocationSource
 controller, shows the ongoing notification (Stop action), holds a partial wake lock, and pushes widget
 updates on a 1s loop. On stop, persists the activity via `ActivityRepository.saveRecorded(...)`.
 
-### `phone/map` — the Canvas map
-- `WorldBasemap`: loads and caches the bundled GeoJSON once; exposes polygons as normalized
-  `[0,1]²` Mercator coordinates.
-- `MapCanvas`: a Compose `Canvas` with pan + pinch-zoom state (a viewport over `[0,1]²`). Draws, in
-  order: basemap land polygons → square overlay (z14 grid lines + z17/z14 filled claimed tiles) →
-  trail heatmap (when toggled) → current route (on active/detail screens).
-- The heatmap renders every activity's polyline with additive alpha so overlapping/repeat routes
-  accumulate brightness. Filter by transport mode applies to which activities contribute.
+### `phone/map/MapView.kt` — the MapLibre map
+- Hosts a `org.maplibre.android.maps.MapView` (`AndroidView`), lifecycle-forwarded via a
+  `rememberMapViewWithLifecycle()` helper, loading the bundled `asset://map/style.json` style.
+  `MapLibre.getInstance(context)` is called once per `MapView` instance, before construction —
+  single-arg, no API key, fully offline.
+- Claimed squares (z14 squadrats, z17 squadratinhos), the route/heatmap, and the current-location
+  marker are each a `GeoJsonSource` + style layer (`FillLayer`/`LineLayer`/`HeatmapLayer`/
+  `CircleLayer`) added above the basemap's own layers once the style loads, then updated in place
+  (`setGeoJson(...)`, `setProperties(PropertyFactory...)`) as `claims`/`routes`/`showHeatmap`/
+  `showSquares`/`currentLocation` change — no per-frame drawing code of our own.
+- The heatmap uses MapLibre's built-in `HeatmapLayer` (point density, not per-square counts) over
+  every activity's points; filter by transport mode applies to which activities contribute.
 
 ### `phone` screens (Navigation Compose, single activity)
 - `map` — global: basemap + all claimed squares + heatmap toggle + transport-mode filter chips.
@@ -77,10 +84,20 @@ Reads persisted totals from `ActivityRepository`: sum of distinct squadrats, dis
 (union across activities), total km, and the deltas gained in the last 7 days (compare all-time vs
 activities older than 7 days). Re-rendered on data change and from the service loop.
 
-## Status (scaffold delivered)
+## Map basemap detail (data tradeoff)
 
-Done & unit-tested: Gradle/build/CI scaffold, `core/geo` (SlippyTile, Geo, TileClaims, WebMercator),
-`core/metrics`, `core/model`, `core/gpx`, `core/activity/ActivityRepository`, theme, launchable
-skeleton `MainActivity`, notification channel. Remaining (tracked as tasks): TrackingController +
-location + service, map canvas + world asset, full screens + nav, import + share target, widget,
-shortcuts, German strings.
+The bundled basemap is Protomaps global vector tiles **z0–6** (~43 MB, `pmtiles extract --maxzoom=6`).
+This covers the whole world within the ~50 MB budget, but at city zoom it is overzoomed and coarse
+(no streets, generalized coastline) — real city/street detail globally is impossible offline at this
+size. MapLibre does proper LOD, so the fix is purely data: either bump the global maxzoom (roughly
+doubles size per level — z7 ≈ ~85 MB) or bundle a higher-zoom regional extract (e.g. a Denmark/Europe
+`--bbox … --maxzoom=13` extract) merged with the global overview. Regenerate via
+`scripts/world-asset` (see that dir) / the `pmtiles` CLI.
+
+## Status
+
+Shipped & verified (emulator + unit tests): full app — core domain (tile math/metrics/GPX,
+JVM-tested), tracking service + controller, Map/History/Record/Detail screens, GPX import + share
+target, stats widget, shortcuts, en/de localization, first-open location permission, and the
+**MapLibre offline PMTiles map** with square/route/heatmap/marker overlays. Open follow-up: basemap
+zoom/coverage tuning (above).

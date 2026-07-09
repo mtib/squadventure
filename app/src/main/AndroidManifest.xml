@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Strip INTERNET so the app can open no sockets: the map is bundled and rendered from
+         asset://, nothing leaves the device. MapLibre still pulls in ACCESS_NETWORK_STATE /
+         ACCESS_WIFI_STATE (its ConnectivityReceiver reads connectivity state and crashes without
+         them) — those are read-only and cannot transmit data, so they're left in place. -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
 
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
