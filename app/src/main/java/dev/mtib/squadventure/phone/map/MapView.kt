@@ -14,12 +14,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -44,13 +44,20 @@ data class MapClaims(
  * contract shared by the screens; the rendering (basemap polygons, square overlay, trail heatmap,
  * route) lives in this package.
  *
+ * Every layer is drawn directly in screen pixels (`[MapViewport.worldToScreen]`) after culling and
+ * clipping to the visible viewport, rather than scaling world-space geometry by `zoomPx` (which can
+ * reach hundreds of millions at max zoom — far past Skia's rasterizer limits). See
+ * [dev.mtib.squadventure.phone.map.clipRingToRect] / [dev.mtib.squadventure.phone.map.clipSegmentToRect].
+ *
  * @param claims claimed squares to fill.
- * @param routes GPX paths to draw. On the global map these feed the Strava-style trail heatmap
- *   (line-density, brighter where routes overlap) when [showHeatmap] is on; on a detail screen this
- *   is the single activity's route.
+ * @param routes GPX paths to draw. On the global map these feed the tile-density trail heatmap
+ *   (see [HeatmapGrid]) when [showHeatmap] is on; on a detail screen this is the single activity's
+ *   route, drawn as a solid line.
  * @param showHeatmap toggles the trail heatmap layer.
  * @param showSquares toggles the claimed-square overlay.
  * @param focus optional point to center/zoom on initially (e.g. an activity's start).
+ * @param currentLocation optional live position to mark with a "you are here" dot, drawn on top of
+ *   every other layer and never culled — only skipped if it falls outside the canvas.
  */
 @Composable
 fun MapView(
@@ -60,6 +67,7 @@ fun MapView(
     showHeatmap: Boolean = false,
     showSquares: Boolean = true,
     focus: TrackPoint? = null,
+    currentLocation: TrackPoint? = null,
 ) {
     val context = LocalContext.current
     var basemap by remember { mutableStateOf<WorldBasemap?>(null) }
@@ -79,12 +87,13 @@ fun MapView(
     }
 
     val landColor = MaterialTheme.colorScheme.surfaceVariant
+    val seaColor = MaterialTheme.colorScheme.surface
     val projectedRoutes = remember(routes) { routes.mapNotNull(::projectRoute) }
 
     Canvas(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
+            .background(seaColor)
             .onSizeChanged { canvasSize = it }
             .pointerInput(Unit) {
                 detectTransformGestures { centroid, pan, zoom, _ ->
@@ -94,42 +103,45 @@ fun MapView(
     ) {
         val vp = viewport ?: return@Canvas
         val visible = vp.visibleWorldRect(canvasSize)
+        val clipRect = visible.expanded(CLIP_MARGIN_FRACTION)
 
-        scale(scaleX = vp.zoomPx, scaleY = vp.zoomPx, pivot = Offset.Zero) {
-            translate(left = -vp.origin.x, top = -vp.origin.y) {
-                basemap?.let { drawPath(it.landPath, color = landColor) }
+        basemap?.let { drawBasemap(it, clipRect, vp, landColor, seaColor) }
 
-                if (showSquares) {
-                    drawClaimedTiles(
-                        keys = claims.squadratinhos,
-                        zoom = SlippyTile.ZOOM_SQUADRATINHO,
-                        visible = visible,
-                        fillColor = Squadratinho.copy(alpha = 0.35f),
-                    )
-                    drawClaimedTiles(
-                        keys = claims.squadrats,
-                        zoom = SlippyTile.ZOOM_SQUADRAT,
-                        visible = visible,
-                        fillColor = Squadrat.copy(alpha = 0.12f),
-                        strokeColor = Squadrat.copy(alpha = 0.8f),
-                        strokeWidthPx = SQUARE_OUTLINE_DP.dp.toPx() / vp.zoomPx,
-                    )
-                }
-
-                if (showHeatmap) {
-                    drawHeatmap(projectedRoutes, visible, vp.zoomPx)
-                } else {
-                    drawRoutes(projectedRoutes, visible, vp.zoomPx)
-                }
-            }
+        if (showSquares) {
+            drawClaimedTiles(
+                keys = claims.squadratinhos,
+                zoom = SlippyTile.ZOOM_SQUADRATINHO,
+                visible = visible,
+                vp = vp,
+                fillColor = Squadratinho.copy(alpha = 0.35f),
+            )
+            drawClaimedTiles(
+                keys = claims.squadrats,
+                zoom = SlippyTile.ZOOM_SQUADRAT,
+                visible = visible,
+                vp = vp,
+                fillColor = Squadrat.copy(alpha = 0.12f),
+                strokeColor = Squadrat.copy(alpha = 0.8f),
+                strokeWidthPx = SQUARE_OUTLINE_DP.dp.toPx(),
+            )
         }
+
+        if (showHeatmap) {
+            drawHeatmap(projectedRoutes, clipRect, vp)
+        } else {
+            drawRoutes(projectedRoutes, clipRect, vp)
+        }
+
+        currentLocation?.let { drawCurrentLocationMarker(it, canvasSize, vp) }
     }
 }
 
+private const val CLIP_MARGIN_FRACTION = 0.1f
 private const val SQUARE_OUTLINE_DP = 1.5f
-private const val HEATMAP_LINE_ALPHA = 0.12f
-private const val HEATMAP_LINE_WIDTH_DP = 5f
 private const val ROUTE_LINE_WIDTH_DP = 3f
+private const val HEATMAP_CELL_DP = 12f
+private const val CURRENT_LOCATION_RADIUS_DP = 7f
+private const val CURRENT_LOCATION_RING_DP = 2f
 
 private data class ProjectedRoute(val points: List<Offset>, val bounds: WorldRect)
 
@@ -153,10 +165,46 @@ private fun projectRoute(points: List<TrackPoint>): ProjectedRoute? {
     return ProjectedRoute(offsets, WorldRect(minX, minY, maxX, maxY))
 }
 
+private fun DrawScope.drawBasemap(
+    basemap: WorldBasemap,
+    clipRect: WorldRect,
+    vp: MapViewport,
+    landColor: Color,
+    seaColor: Color,
+) {
+    for (polygon in basemap.land) {
+        if (!clipRect.intersects(polygon.bounds)) continue
+        drawClippedPolygon(polygon, clipRect, vp, landColor)
+    }
+    for (lake in basemap.lakes) {
+        if (!clipRect.intersects(lake.bounds)) continue
+        drawClippedPolygon(lake, clipRect, vp, seaColor)
+    }
+}
+
+private fun DrawScope.drawClippedPolygon(polygon: WorldPolygon, clipRect: WorldRect, vp: MapViewport, color: Color) {
+    val path = Path().apply { fillType = PathFillType.EvenOdd }
+    var hasRing = false
+    for (ring in polygon.rings) {
+        val clipped = clipRingToRect(ring, clipRect)
+        if (clipped.size < 3) continue
+        hasRing = true
+        val first = vp.worldToScreen(clipped[0])
+        path.moveTo(first.x, first.y)
+        for (i in 1 until clipped.size) {
+            val screen = vp.worldToScreen(clipped[i])
+            path.lineTo(screen.x, screen.y)
+        }
+        path.close()
+    }
+    if (hasRing) drawPath(path, color = color)
+}
+
 private fun DrawScope.drawClaimedTiles(
     keys: Set<Long>,
     zoom: Int,
     visible: WorldRect,
+    vp: MapViewport,
     fillColor: Color,
     strokeColor: Color? = null,
     strokeWidthPx: Float = 0f,
@@ -167,8 +215,8 @@ private fun DrawScope.drawClaimedTiles(
         val x = WebMercator.tileEdge(SlippyTile.keyX(key), zoom).toFloat()
         val y = WebMercator.tileEdge(SlippyTile.keyY(key), zoom).toFloat()
         if (!visible.intersects(x, y, span)) continue
-        val topLeft = Offset(x, y)
-        val tileSize = Size(span, span)
+        val topLeft = vp.worldToScreen(Offset(x, y))
+        val tileSize = Size(span * vp.zoomPx, span * vp.zoomPx)
         drawRect(color = fillColor, topLeft = topLeft, size = tileSize)
         if (strokeColor != null) {
             drawRect(color = strokeColor, topLeft = topLeft, size = tileSize, style = Stroke(width = strokeWidthPx))
@@ -176,44 +224,73 @@ private fun DrawScope.drawClaimedTiles(
     }
 }
 
-private fun DrawScope.drawHeatmap(routes: List<ProjectedRoute>, visible: WorldRect, zoomPx: Float) {
-    val strokeWidth = HEATMAP_LINE_WIDTH_DP.dp.toPx() / zoomPx
+private fun DrawScope.drawRoutes(routes: List<ProjectedRoute>, clipRect: WorldRect, vp: MapViewport) {
+    val strokeWidth = ROUTE_LINE_WIDTH_DP.dp.toPx()
     for (route in routes) {
-        if (!visible.intersects(route.bounds)) continue
-        drawPolyline(
-            points = route.points,
-            color = Trail,
-            alpha = HEATMAP_LINE_ALPHA,
-            strokeWidth = strokeWidth,
-            blendMode = BlendMode.Plus,
-        )
+        if (!clipRect.intersects(route.bounds)) continue
+        drawClippedPolyline(route.points, clipRect, vp, Trail, alpha = 1f, strokeWidth = strokeWidth)
     }
 }
 
-private fun DrawScope.drawRoutes(routes: List<ProjectedRoute>, visible: WorldRect, zoomPx: Float) {
-    val strokeWidth = ROUTE_LINE_WIDTH_DP.dp.toPx() / zoomPx
-    for (route in routes) {
-        if (!visible.intersects(route.bounds)) continue
-        drawPolyline(points = route.points, color = Trail, alpha = 1f, strokeWidth = strokeWidth)
-    }
-}
-
-private fun DrawScope.drawPolyline(
+private fun DrawScope.drawClippedPolyline(
     points: List<Offset>,
+    clipRect: WorldRect,
+    vp: MapViewport,
     color: Color,
     alpha: Float,
     strokeWidth: Float,
-    blendMode: BlendMode = BlendMode.SrcOver,
 ) {
     if (points.size < 2) return
     for (i in 0 until points.size - 1) {
+        val clipped = clipSegmentToRect(points[i], points[i + 1], clipRect) ?: continue
         drawLine(
             color = color,
-            start = points[i],
-            end = points[i + 1],
+            start = vp.worldToScreen(clipped.first),
+            end = vp.worldToScreen(clipped.second),
             strokeWidth = strokeWidth,
             alpha = alpha,
-            blendMode = blendMode,
         )
     }
+}
+
+/**
+ * Draws the trail heatmap as a rasterized tile-density grid (see [HeatmapGrid]) rather than
+ * additive translucent lines: cells where more activities' paths overlap get a hotter color, and
+ * the cell size tracks screen pixels so it looks consistent across zoom levels.
+ */
+private fun DrawScope.drawHeatmap(routes: List<ProjectedRoute>, clipRect: WorldRect, vp: MapViewport) {
+    val visibleRoutes = routes.filter { clipRect.intersects(it.bounds) }
+    if (visibleRoutes.isEmpty()) return
+
+    val cellPx = HEATMAP_CELL_DP.dp.toPx()
+    val hz = chooseHeatmapZoom(vp.zoomPx, cellPx, clipRect)
+    val grid = buildHeatmapGrid(visibleRoutes.map { it.points }, clipRect, hz) ?: return
+    val blurred = blurHeatmapGrid(grid)
+    val cells = heatmapCells(grid, blurred)
+    if (cells.isEmpty()) return
+
+    val sizePx = WebMercator.tileSpan(hz).toFloat() * vp.zoomPx
+    val cellSize = Size(sizePx, sizePx)
+    for (cell in cells) {
+        val worldX = WebMercator.tileEdge(cell.tileX, hz).toFloat()
+        val worldY = WebMercator.tileEdge(cell.tileY, hz).toFloat()
+        drawRect(color = heatColor(cell.intensity), topLeft = vp.worldToScreen(Offset(worldX, worldY)), size = cellSize)
+    }
+}
+
+/** transparent -> Trail (cool, low traffic) -> Squadratinho (warm, high traffic). */
+private fun heatColor(intensity: Float): Color {
+    val alpha = (0.15f + 0.65f * intensity).coerceIn(0f, 1f)
+    return lerp(Trail, Squadratinho, intensity).copy(alpha = alpha)
+}
+
+private fun DrawScope.drawCurrentLocationMarker(point: TrackPoint, canvasSize: IntSize, vp: MapViewport) {
+    val xy = WebMercator.project(point.lat, point.lon)
+    val screen = vp.worldToScreen(Offset(xy[0].toFloat(), xy[1].toFloat()))
+    if (screen.x < 0f || screen.x > canvasSize.width || screen.y < 0f || screen.y > canvasSize.height) return
+
+    val radius = CURRENT_LOCATION_RADIUS_DP.dp.toPx()
+    val ringWidth = CURRENT_LOCATION_RING_DP.dp.toPx()
+    drawCircle(color = Color.White, radius = radius + ringWidth, center = screen)
+    drawCircle(color = Trail, radius = radius, center = screen)
 }

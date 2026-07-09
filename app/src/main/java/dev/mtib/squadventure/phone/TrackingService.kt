@@ -62,7 +62,7 @@ class TrackingService : Service() {
 
         startForegroundCompat(buildNotification())
         acquireWakeLock()
-        location.start { fix -> TrackingController.onLocation(fix) }
+        runCatching { location.start { fix -> TrackingController.onLocation(fix) } }
 
         scope.launch {
             while (isActive && TrackingController.isTracking.value) {
@@ -77,7 +77,7 @@ class TrackingService : Service() {
     private fun finish() {
         val points = TrackingController.stop()
         location.stop()
-        if (points.size >= 2) {
+        if (points.isNotEmpty()) {
             val id = "act-$startedAtMs"
             val mode = TrackingController.transportMode.value
             ActivityRepository(applicationContext).saveRecorded(id, startedAtMs, points, mode)

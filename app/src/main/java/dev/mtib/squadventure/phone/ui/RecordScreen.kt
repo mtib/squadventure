@@ -1,6 +1,7 @@
 package dev.mtib.squadventure.phone.ui
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -30,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import dev.mtib.squadventure.R
 import dev.mtib.squadventure.core.model.TransportMode
 import dev.mtib.squadventure.core.tracking.TrackingController
@@ -46,38 +48,69 @@ fun RecordScreen() {
     val liveSquadratinhos by TrackingController.liveSquadratinhos.collectAsState()
 
     var selectedMode by rememberSaveable { mutableStateOf(TransportMode.WALK) }
-    var pendingBackgroundRequest by remember { mutableStateOf(false) }
+    var showBackgroundRationale by remember { mutableStateOf(false) }
+    var askedBackground by rememberSaveable { mutableStateOf(false) }
 
-    val backgroundPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        TrackingService.start(context, selectedMode)
-    }
-    val foregroundPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-        val fineGranted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
-        when {
-            !fineGranted -> Toast.makeText(context, context.getString(R.string.perm_denied), Toast.LENGTH_SHORT).show()
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> pendingBackgroundRequest = true
-            else -> TrackingService.start(context, selectedMode)
+    fun granted(permission: String) =
+        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+    fun hasForegroundLocation() =
+        granted(Manifest.permission.ACCESS_FINE_LOCATION) || granted(Manifest.permission.ACCESS_COARSE_LOCATION)
+
+    fun hasBackgroundLocation() =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || granted(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+
+    fun beginTracking() = TrackingService.start(context, selectedMode)
+
+    val backgroundPermissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { beginTracking() }
+
+    /** Start now; only prompt for background location once, and never if it's already granted. */
+    fun startOrRequestBackground() {
+        if (hasBackgroundLocation() || askedBackground) {
+            beginTracking()
+        } else {
+            askedBackground = true
+            showBackgroundRationale = true
         }
     }
 
-    if (pendingBackgroundRequest) {
+    val foregroundPermissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+            val fineGranted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+                hasForegroundLocation()
+            if (fineGranted) startOrRequestBackground()
+            else Toast.makeText(context, context.getString(R.string.perm_denied), Toast.LENGTH_SHORT).show()
+        }
+
+    fun onStart() {
+        if (hasForegroundLocation()) {
+            startOrRequestBackground()
+        } else {
+            val perms = buildList {
+                add(Manifest.permission.ACCESS_FINE_LOCATION)
+                add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            foregroundPermissionLauncher.launch(perms.toTypedArray())
+        }
+    }
+
+    if (showBackgroundRationale) {
         AlertDialog(
-            onDismissRequest = {
-                pendingBackgroundRequest = false
-                TrackingService.start(context, selectedMode)
-            },
+            onDismissRequest = { showBackgroundRationale = false; beginTracking() },
             text = { Text(stringResource(R.string.perm_background_rationale)) },
             confirmButton = {
                 TextButton(onClick = {
-                    pendingBackgroundRequest = false
+                    showBackgroundRationale = false
                     backgroundPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                 }) { Text(stringResource(R.string.action_ok)) }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    pendingBackgroundRequest = false
-                    TrackingService.start(context, selectedMode)
-                }) { Text(stringResource(R.string.action_cancel)) }
+                TextButton(onClick = { showBackgroundRationale = false; beginTracking() }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             },
         )
     }
@@ -87,8 +120,9 @@ fun RecordScreen() {
             MapView(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 routes = listOf(path),
-                focus = path.lastOrNull(),
+                focus = path.firstOrNull(),
                 showSquares = true,
+                currentLocation = path.lastOrNull(),
             )
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -118,16 +152,7 @@ fun RecordScreen() {
                 onSelect = { mode -> mode?.let { selectedMode = it } },
             )
             Spacer(Modifier.height(32.dp))
-            Button(onClick = {
-                val perms = buildList {
-                    add(Manifest.permission.ACCESS_FINE_LOCATION)
-                    add(Manifest.permission.ACCESS_COARSE_LOCATION)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        add(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                }
-                foregroundPermissionLauncher.launch(perms.toTypedArray())
-            }) {
+            Button(onClick = { onStart() }) {
                 Text(stringResource(R.string.record_start))
             }
         }

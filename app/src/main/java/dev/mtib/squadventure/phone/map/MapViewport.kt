@@ -19,6 +19,10 @@ data class MapViewport(val origin: Offset, val zoomPx: Float) {
         return WorldRect(origin.x, origin.y, origin.x + w, origin.y + h)
     }
 
+    /** Projects a world-space point to screen pixels: bounded near `[0, canvasSize]` for on-screen points. */
+    fun worldToScreen(world: Offset): Offset =
+        Offset((world.x - origin.x) * zoomPx, (world.y - origin.y) * zoomPx)
+
     /** Applies a pinch/pan/zoom gesture, keeping [centroid] (screen px) fixed under the fingers. */
     fun applyGesture(canvasSize: IntSize, centroid: Offset, pan: Offset, zoomFactor: Float): MapViewport {
         val worldAtCentroid = Offset(origin.x + centroid.x / zoomPx, origin.y + centroid.y / zoomPx)
@@ -83,4 +87,11 @@ data class WorldRect(val minX: Float, val minY: Float, val maxX: Float, val maxY
 
     fun union(other: WorldRect): WorldRect =
         WorldRect(min(minX, other.minX), min(minY, other.minY), max(maxX, other.maxX), max(maxY, other.maxY))
+
+    /** Grows this rect by [marginFraction] of its own width/height on each side, for clip/cull margins. */
+    fun expanded(marginFraction: Float): WorldRect {
+        val marginX = (maxX - minX) * marginFraction
+        val marginY = (maxY - minY) * marginFraction
+        return WorldRect(minX - marginX, minY - marginY, maxX + marginX, maxY + marginY)
+    }
 }
