@@ -15,7 +15,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -34,6 +37,7 @@ import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
@@ -84,6 +88,7 @@ fun MapView(
     currentLocation: TrackPoint? = null,
     liveRoute: List<TrackPoint>? = null,
     fitPoints: List<TrackPoint>? = null,
+    attributionBottomPadding: Dp = 0.dp,
 ) {
     val context = LocalContext.current
     val mapView = rememberMapViewWithLifecycle()
@@ -93,12 +98,18 @@ fun MapView(
     var cameraInitialized by remember { mutableStateOf(false) }
     val heatmapScope = rememberCoroutineScope()
     val heatmapJob = remember { AtomicReference<Job?>(null) }
+    val density = LocalDensity.current
+    val marginLeftPx = with(density) { 8.dp.roundToPx() }
+    val marginBottomPx = with(density) { (attributionBottomPadding + 6.dp).roundToPx() }
 
     AndroidView(
         modifier = modifier.fillMaxSize(),
         factory = {
             mapView.getMapAsync { map ->
                 maplibreMap = map
+                // Lift the MapLibre logo + attribution above any overlay band at the bottom.
+                map.uiSettings.setLogoMargins(marginLeftPx, 0, 0, marginBottomPx)
+                map.uiSettings.setAttributionMargins(marginLeftPx, 0, 0, marginBottomPx)
                 map.setStyle(Style.Builder().fromJson(styleJson))
                 map.getStyle { loadedStyle -> style = loadedStyle }
             }
@@ -155,9 +166,13 @@ private fun rememberMapViewWithLifecycle(): NativeMapView {
     val context = LocalContext.current
     // MapLibre requires onCreate before any onStart/onResume; without it a re-entered MapView
     // (e.g. Record -> Map) starts an uninitialized native map and crashes.
+    // TextureView mode (not the default SurfaceView) avoids the synchronous surfaceChanged handshake
+    // that blocks the main thread for seconds on layout/navigation changes -> ANR. It also composes
+    // more reliably inside AndroidView.
     val mapView = remember {
         MapLibre.getInstance(context)
-        NativeMapView(context).apply { onCreate(null) }
+        NativeMapView(context, MapLibreMapOptions.createFromAttributes(context).textureMode(true))
+            .apply { onCreate(null) }
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current

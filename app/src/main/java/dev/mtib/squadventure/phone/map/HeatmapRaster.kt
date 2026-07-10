@@ -23,7 +23,7 @@ data class HeatmapRaster(val bitmap: Bitmap, val quad: LatLngQuad)
  * normalization max keeps brightness stable across pans/zooms instead of rescaling per frame.
  */
 object HeatmapRenderer {
-    private const val MAX_BITMAP_DIMENSION = 1024
+    private const val MAX_BITMAP_DIMENSION = 768
     private const val MARGIN_PX = 48
     private const val STAMP_RADIUS_PX = 2
     private const val BLUR_PASSES = 3

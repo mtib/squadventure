@@ -21,6 +21,10 @@
     <string name="map_layer_squadrats">Squadrats</string>
     <string name="map_layer_squadratinhos">Squadratinhos</string>
     <string name="map_filter">Filter</string>
+    <string name="map_yard">Yard</string>
+    <string name="map_mini_yard">Mini-Yard</string>
+    <string name="map_ubersquare">Über-Quadrat</string>
+    <string name="map_uber_mini_square">Über-Mini-Quadrat</string>
 
     <!-- Stats -->
     <string name="stat_squadrats">Quadrate</string>

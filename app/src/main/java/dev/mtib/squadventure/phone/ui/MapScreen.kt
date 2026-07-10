@@ -5,12 +5,14 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Build
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
@@ -25,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
@@ -64,6 +67,7 @@ fun MapScreen(viewModel: MapViewModel = viewModel()) {
             showSquares = true,
             focus = currentLocation,
             currentLocation = currentLocation,
+            attributionBottomPadding = 64.dp,
         )
         Column(
             modifier = Modifier
@@ -82,6 +86,19 @@ fun MapScreen(viewModel: MapViewModel = viewModel()) {
                     Switch(checked = state.showHeatmap, onCheckedChange = viewModel::setHeatmap)
                 }
             }
+        }
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(Color.Black.copy(alpha = 0.55f))
+                .padding(vertical = 10.dp, horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            StatItem(stringResource(R.string.map_yard), state.yard.toString(), Modifier.weight(1f))
+            StatItem(stringResource(R.string.map_mini_yard), state.miniYard.toString(), Modifier.weight(1f))
+            StatItem(stringResource(R.string.map_ubersquare), state.uberSquare.toString(), Modifier.weight(1f))
+            StatItem(stringResource(R.string.map_uber_mini_square), state.uberMiniSquare.toString(), Modifier.weight(1f))
         }
         if (state.loading) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))

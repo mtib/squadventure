@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.mtib.squadventure.core.activity.ActivityRepository
 import dev.mtib.squadventure.core.geo.TileClaims
+import dev.mtib.squadventure.core.metrics.SquareMetrics
 import dev.mtib.squadventure.core.model.TrackPoint
 import dev.mtib.squadventure.core.model.TransportMode
 import dev.mtib.squadventure.phone.map.MapClaims
@@ -20,6 +21,10 @@ data class MapUiState(
     val showHeatmap: Boolean = true,
     val filter: TransportMode? = null,
     val loading: Boolean = true,
+    val yard: Int = 0,
+    val miniYard: Int = 0,
+    val uberSquare: Int = 0,
+    val uberMiniSquare: Int = 0,
 )
 
 /** Global-map data: claimed squares (optionally filtered by mode) and, when the heatmap is on, every contributing activity's path. */
@@ -48,6 +53,8 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
             val modes = filter?.let { setOf(it) }
             val squadratinhos = repo.allSquadratinhoKeys(modes)
             val squadrats = TileClaims.squadratsFromSquadratinhos(squadratinhos)
+            val bigStats = SquareMetrics.stats(squadrats)
+            val smallStats = SquareMetrics.stats(squadratinhos)
             val routes = if (showHeatmap) {
                 repo.list().filter { modes == null || it.transportMode in modes }.map { repo.loadPoints(it.id) }
             } else {
@@ -57,6 +64,10 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
                 claims = MapClaims(squadrats = squadrats, squadratinhos = squadratinhos),
                 routes = routes,
                 loading = false,
+                yard = bigStats.yard,
+                miniYard = smallStats.yard,
+                uberSquare = bigStats.uberSquare,
+                uberMiniSquare = smallStats.uberSquare,
             )
         }
     }
