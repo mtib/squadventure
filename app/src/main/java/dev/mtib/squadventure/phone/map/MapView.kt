@@ -153,9 +153,11 @@ fun MapView(
 @Composable
 private fun rememberMapViewWithLifecycle(): NativeMapView {
     val context = LocalContext.current
+    // MapLibre requires onCreate before any onStart/onResume; without it a re-entered MapView
+    // (e.g. Record -> Map) starts an uninitialized native map and crashes.
     val mapView = remember {
         MapLibre.getInstance(context)
-        NativeMapView(context)
+        NativeMapView(context).apply { onCreate(null) }
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -167,11 +169,12 @@ private fun rememberMapViewWithLifecycle(): NativeMapView {
                 Lifecycle.Event.ON_RESUME -> mapView.onResume()
                 Lifecycle.Event.ON_PAUSE -> mapView.onPause()
                 Lifecycle.Event.ON_STOP -> mapView.onStop()
-                Lifecycle.Event.ON_DESTROY -> mapView.onDestroy()
                 else -> Unit
             }
         }
         lifecycle.addObserver(observer)
+        // onDestroy is called exactly once here on dispose (not also from an ON_DESTROY observer,
+        // which would double-destroy the native map and crash).
         onDispose {
             lifecycle.removeObserver(observer)
             mapView.onDestroy()
