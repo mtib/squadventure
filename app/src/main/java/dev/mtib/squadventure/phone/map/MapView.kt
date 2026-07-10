@@ -100,7 +100,10 @@ fun MapView(
 ) {
     val context = LocalContext.current
     val mapView = rememberMapViewWithLifecycle()
-    val styleJson = remember { MapAssets.styleJson(context) }
+    // Building the style copies the (large) PMTiles to internal storage on first run; do it off the
+    // main thread so it never blocks/ANRs during composition.
+    var styleJson by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { styleJson = withContext(Dispatchers.IO) { MapAssets.styleJson(context) } }
     var maplibreMap by remember { mutableStateOf<MapLibreMap?>(null) }
     var style by remember { mutableStateOf<Style?>(null) }
     var cameraInitialized by remember { mutableStateOf(false) }
@@ -118,12 +121,18 @@ fun MapView(
                 // Lift the MapLibre logo + attribution above any overlay band at the bottom.
                 map.uiSettings.setLogoMargins(marginLeftPx, 0, 0, marginBottomPx)
                 map.uiSettings.setAttributionMargins(marginLeftPx, 0, 0, marginBottomPx)
-                map.setStyle(Style.Builder().fromJson(styleJson))
-                map.getStyle { loadedStyle -> style = loadedStyle }
             }
             mapView
         },
     )
+
+    // Apply the style only once both the map and the (off-main-thread) style JSON are ready.
+    LaunchedEffect(maplibreMap, styleJson) {
+        val map = maplibreMap ?: return@LaunchedEffect
+        val json = styleJson ?: return@LaunchedEffect
+        if (style != null) return@LaunchedEffect
+        map.setStyle(Style.Builder().fromJson(json)) { loadedStyle -> style = loadedStyle }
+    }
 
     LaunchedEffect(maplibreMap) {
         val map = maplibreMap

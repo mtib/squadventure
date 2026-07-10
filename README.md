@@ -11,7 +11,7 @@ network: your tracks never leave the device.
 - **Claim squares** on the OSM slippy-tile grid: squadratinhos (zoom 17, ~200 m) and squadrats
   (zoom 14, ~1.5 km). Track total squares, your biggest **yard** (cluster) and **übersquadrat** (max
   solid block).
-- **World map** of all your squares on a bundled low-poly basemap, with a toggle-able **trail heatmap**
+- **World map** of all your squares on a bundled offline vector basemap, with a toggle-able **trail heatmap**
   and **transport-mode filters**.
 - **History log** of every activity; tap any to see its route, squares, and stats, re-tag its transport
   mode, or **export GPX**.
@@ -24,6 +24,22 @@ network: your tracks never leave the device.
 
 No `INTERNET` permission. No analytics, no crash reporting, no cloud. The map is bundled in the APK;
 location comes from the device GPS via `LocationManager`. `allowBackup="false"`.
+
+## Offline basemap
+
+The map is a global **PMTiles** vector basemap (Protomaps daily build, OpenStreetMap-derived, ODbL)
+rendered by MapLibre Native — `app/src/main/assets/map/basemap.pmtiles` (zoom 0-7, ~178 MB). It is
+**git-ignored** (too large for git, >100 MB) and generated before every build; CI does this
+automatically. To build locally, generate it once first:
+
+```bash
+scripts/world-asset/generate.sh   # needs the `pmtiles` CLI on PATH
+```
+
+The app copies the tileset into internal storage on first launch (MapLibre's PMTiles reader can't
+random-access an `asset://` file), so the installed footprint is ~2× the asset (~356 MB). PMTiles is
+already gzip-compressed internally, so the APK stores it uncompressed (`noCompress`) — deflate would
+save nothing.
 
 ## Build
 

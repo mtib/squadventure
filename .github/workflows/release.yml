@@ -30,6 +30,24 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      # The bundled offline basemap (app/src/main/assets/map/basemap.pmtiles) is git-ignored because
+      # it is too large for git (>100MB). Generate it here before the build. Cache it across runs,
+      # keyed on the build date + zoom in generate.sh, so it is only streamed once.
+      - name: Cache basemap tileset
+        id: cache-basemap
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/assets/map/basemap.pmtiles
+          key: basemap-${{ hashFiles('scripts/world-asset/generate.sh') }}
+
+      - name: Generate basemap tileset
+        if: steps.cache-basemap.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL "https://github.com/protomaps/go-pmtiles/releases/download/v1.31.0/go-pmtiles_1.31.0_Linux_x86_64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP" pmtiles
+          export PATH="$RUNNER_TEMP:$PATH"
+          bash scripts/world-asset/generate.sh
+
       # Sign with the same debug keystore as local builds so releases install as in-place updates.
       # Optional: set the DEBUG_KEYSTORE_BASE64 repo secret. Without it, a fresh debug key is
       # generated and users must uninstall before installing the new build.

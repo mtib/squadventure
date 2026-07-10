@@ -15,11 +15,13 @@ DEST="$REPO_ROOT/app/src/main/assets/map/basemap.pmtiles"
 # Pick a recent daily build (YYYYMMDD). List: https://maps.protomaps.com/builds
 BUILD_URL="${BUILD_URL:-https://build.protomaps.com/20260709.pmtiles}"
 
-# Global overview, zoom 0-6 (~43MB) — country/region level, fits the ~50MB budget but has no
-# city/street detail. For walk/bike/city detail, ADD a regional high-zoom extract and wire a second
-# MapLibre source (see README.md), e.g.:
-#   pmtiles extract "$BUILD_URL" region.pmtiles --bbox=7.5,54.4,13.5,58.0 --maxzoom=14
-MAXZOOM="${MAXZOOM:-6}"
+# Global vector basemap, zoom 0-7. Measured sizes for this build: z0-6 ~43MB, z0-7 ~178MB,
+# z0-8 ~524MB. We ship z0-7: it gives city/region detail (water edges, forests, major roads) while
+# staying within the ~400MB installed budget. The app copies the tileset to internal storage on
+# first run, so installed footprint is ~2x the asset (~356MB) — see phone/map/MapView.kt.
+# NOTE: the asset is git-ignored (>100MB); regenerate locally with this script and in CI via
+# .github/workflows/release.yml before every build.
+MAXZOOM="${MAXZOOM:-7}"
 
 pmtiles extract "$BUILD_URL" "$DEST" --maxzoom="$MAXZOOM"
 pmtiles show "$DEST" | grep -E "min zoom|max zoom|tile type"

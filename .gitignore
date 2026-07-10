@@ -9,3 +9,6 @@ build/
 .cxx/
 *.keystore
 /docker-compose.isolated.yml
+
+# Bundled offline basemap (generated in CI; too large for git, >100MB)
+app/src/main/assets/map/basemap.pmtiles
