@@ -18,7 +18,7 @@ import dev.mtib.squadventure.core.model.TrackPoint
 class GpsLocationSource(
     context: Context,
     private val minTimeMs: Long = 1_000L,
-    private val minDistanceMeters: Float = 0f,
+    private val minDistanceMeters: Float = 4f,
 ) : LocationSource {
 
     private val manager =

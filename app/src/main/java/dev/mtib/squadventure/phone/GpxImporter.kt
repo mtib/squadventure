@@ -10,7 +10,13 @@ import dev.mtib.squadventure.core.gpx.Gpx
 /** Shared GPX import path for the History screen's SAF picker and [ImportActivity]'s share target. */
 object GpxImporter {
 
-    data class Summary(val added: Int = 0, val duplicate: Int = 0, val empty: Int = 0, val failed: Int = 0)
+    data class Summary(
+        val added: Int = 0,
+        val updated: Int = 0,
+        val duplicate: Int = 0,
+        val empty: Int = 0,
+        val failed: Int = 0,
+    )
 
     /**
      * Imports every `<trk>` found across [uris]. A multi-track file becomes several activities.
@@ -18,10 +24,12 @@ object GpxImporter {
      */
     fun importUris(context: Context, repo: ActivityRepository, uris: List<Uri>): Summary {
         var added = 0
+        var updated = 0
         var duplicate = 0
         var empty = 0
         var failed = 0
         var hashes = repo.existingHashes()
+        var geometryHashes = repo.existingGeometryHashes()
         var seq = 0
         for (uri in uris) {
             val tracks = try {
@@ -38,23 +46,32 @@ object GpxImporter {
                 seq++
                 val createdAt = track.points.firstOrNull()?.timeMs ?: System.currentTimeMillis()
                 val id = "imp-${System.currentTimeMillis()}-$seq"
-                when (val result = repo.import(id, createdAt, track.points, track.name, hashes)) {
+                when (val result = repo.import(id, createdAt, track.points, track.name, hashes, geometryHashes)) {
                     is ImportResult.Added -> {
                         added++
                         hashes = hashes + result.meta.contentHash
+                        geometryHashes = geometryHashes + (result.meta.geometryHash to result.meta.id)
+                    }
+                    is ImportResult.Updated -> {
+                        updated++
+                        hashes = hashes + result.meta.contentHash
+                        geometryHashes = geometryHashes + (result.meta.geometryHash to result.meta.id)
                     }
                     ImportResult.Duplicate -> duplicate++
                     ImportResult.Empty -> empty++
                 }
             }
         }
-        return Summary(added, duplicate, empty, failed)
+        return Summary(added, updated, duplicate, empty, failed)
     }
 
     fun message(context: Context, summary: Summary): String {
         val parts = buildList {
             if (summary.added > 0) {
                 add(context.resources.getQuantityString(R.plurals.import_added, summary.added, summary.added))
+            }
+            if (summary.updated > 0) {
+                add(context.resources.getQuantityString(R.plurals.import_updated, summary.updated, summary.updated))
             }
             if (summary.duplicate > 0) add(context.getString(R.string.import_duplicate))
             if (summary.empty > 0) add(context.getString(R.string.import_empty))

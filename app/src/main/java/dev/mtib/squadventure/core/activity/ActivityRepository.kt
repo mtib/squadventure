@@ -19,6 +19,7 @@ private data class DerivedClaims(val squadratinhos: LongArray)
 
 sealed interface ImportResult {
     data class Added(val meta: ActivityMeta) : ImportResult
+    data class Updated(val meta: ActivityMeta) : ImportResult
     data object Duplicate : ImportResult
     data object Empty : ImportResult
 }
@@ -41,7 +42,25 @@ class ActivityRepository(context: Context) {
     fun readMeta(id: String): ActivityMeta? {
         val f = File(dir(id), META)
         if (!f.exists()) return null
-        return runCatching { json.decodeFromString<ActivityMeta>(f.readText()) }.getOrNull()
+        val meta = runCatching { json.decodeFromString<ActivityMeta>(f.readText()) }.getOrNull() ?: return null
+        if (meta.schemaVersion >= CURRENT_SCHEMA) return meta
+        return runCatching { migrate(meta) }.getOrDefault(meta)
+    }
+
+    /**
+     * Recomputes stats introduced since [meta]'s schema version from the stored raw points and
+     * persists them, so existing on-disk activities pick up fixes without a re-import. Duration is
+     * left untouched — the stored track may lack timestamps.
+     */
+    private fun migrate(meta: ActivityMeta): ActivityMeta {
+        val points = loadPoints(meta.id)
+        val migrated = meta.copy(
+            distanceMeters = Geo.pathLengthMeters(Geo.simplify(points, SIMPLIFY_EPSILON_METERS)),
+            geometryHash = Gpx.geometryHash(points),
+            schemaVersion = CURRENT_SCHEMA,
+        )
+        writeMeta(migrated)
+        return migrated
     }
 
     fun loadPoints(id: String): List<TrackPoint> {
@@ -63,6 +82,10 @@ class ActivityRepository(context: Context) {
     }
 
     fun existingHashes(): Set<String> = list().map { it.contentHash }.filter { it.isNotEmpty() }.toHashSet()
+
+    /** Geometry hash to activity id, for matching a re-import against an existing timeless copy. */
+    fun existingGeometryHashes(): Map<String, String> =
+        list().filter { it.geometryHash.isNotEmpty() }.associate { it.geometryHash to it.id }
 
     /** Union of claimed z17 squares across activities, optionally restricted to [modes]. */
     fun allSquadratinhoKeys(modes: Set<dev.mtib.squadventure.core.model.TransportMode>? = null): Set<Long> {
@@ -114,8 +137,11 @@ class ActivityRepository(context: Context) {
 
     /**
      * Import a track. Returns [ImportResult.Duplicate] if an activity with the same content hash
-     * already exists, [ImportResult.Empty] for a track with no usable points. Imports default to
-     * [TransportMode.OTHER]; the user can re-tag afterwards.
+     * already exists (exact re-import, no-op). If instead an existing activity shares the same
+     * [Gpx.geometryHash] (same route, e.g. an old copy that lost its timestamps), it is upgraded in
+     * place — new track/squares/stats are written but its id, transport mode and title are kept —
+     * and [ImportResult.Updated] is returned. Otherwise a new activity is saved as
+     * [ImportResult.Added], defaulting to [TransportMode.OTHER]; the user can re-tag afterwards.
      */
     fun import(
         id: String,
@@ -123,10 +149,16 @@ class ActivityRepository(context: Context) {
         points: List<TrackPoint>,
         title: String?,
         knownHashes: Set<String> = existingHashes(),
+        knownGeometryHashes: Map<String, String> = existingGeometryHashes(),
     ): ImportResult {
         if (points.isEmpty()) return ImportResult.Empty
         val hash = Gpx.contentHash(points)
         if (hash in knownHashes) return ImportResult.Duplicate
+        val geometryHash = Gpx.geometryHash(points)
+        val upgradeId = knownGeometryHashes[geometryHash]
+        if (upgradeId != null) {
+            return ImportResult.Updated(upgrade(upgradeId, points))
+        }
         val meta = save(id, createdAt, points, TransportMode.OTHER, ActivitySource.IMPORTED, title)
         return ImportResult.Added(meta)
     }
@@ -152,6 +184,24 @@ class ActivityRepository(context: Context) {
         mode: TransportMode,
         source: ActivitySource,
         title: String?,
+    ): ActivityMeta = writeActivity(id, createdAt, points, mode, source, title)
+
+    /**
+     * Overwrites an existing activity's track/squares/stats from a freshly re-imported copy of the
+     * same route, keeping its id, creation time, transport mode and title.
+     */
+    private fun upgrade(id: String, points: List<TrackPoint>): ActivityMeta {
+        val existing = requireNotNull(readMeta(id)) { "missing meta for $id" }
+        return writeActivity(existing.id, existing.createdAt, points, existing.transportMode, existing.source, existing.title)
+    }
+
+    private fun writeActivity(
+        id: String,
+        createdAt: Long,
+        points: List<TrackPoint>,
+        mode: TransportMode,
+        source: ActivitySource,
+        title: String?,
     ): ActivityMeta {
         dir(id).mkdirs()
         gpxFile(id).writeText(Gpx.write(points, title))
@@ -165,7 +215,7 @@ class ActivityRepository(context: Context) {
             transportMode = mode,
             source = source,
             title = title,
-            distanceMeters = Geo.pathLengthMeters(points),
+            distanceMeters = Geo.pathLengthMeters(Geo.simplify(points, SIMPLIFY_EPSILON_METERS)),
             durationMs = if (timed.size >= 2) timed.max() - timed.min() else 0L,
             pointCount = points.size,
             squadratCount = squadrats.size,
@@ -173,6 +223,8 @@ class ActivityRepository(context: Context) {
             startLat = points.firstOrNull()?.lat,
             startLon = points.firstOrNull()?.lon,
             contentHash = Gpx.contentHash(points),
+            geometryHash = Gpx.geometryHash(points),
+            schemaVersion = CURRENT_SCHEMA,
         )
         writeMeta(meta)
         return meta
@@ -194,5 +246,11 @@ class ActivityRepository(context: Context) {
         private const val TRACK = "track.gpx"
         private const val META = "meta.json"
         private const val SQUARES = "squares.json"
+
+        /** Bumped whenever a derived-stat computation changes; drives lazy [readMeta] migration. */
+        const val CURRENT_SCHEMA = 1
+
+        /** Douglas–Peucker tolerance for denoising raw GPS jitter before summing distance. */
+        private const val SIMPLIFY_EPSILON_METERS = 5.0
     }
 }

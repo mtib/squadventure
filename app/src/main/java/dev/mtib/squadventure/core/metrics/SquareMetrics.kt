@@ -5,7 +5,10 @@ import dev.mtib.squadventure.core.geo.SlippyTile
 /**
  * Derived stats over a set of claimed tiles (packed [SlippyTile] keys). Squadrats' vocabulary:
  *  - [total]        — number of distinct claimed tiles.
- *  - [yard]         — size of the largest 4-connected (N/E/S/W) cluster of claimed tiles.
+ *  - [yard]         — size of the largest cluster of *surrounded* tiles (VeloViewer "max cluster"):
+ *                     a tile only counts if all four of its N/E/S/W neighbours are also claimed, and
+ *                     the yard is the largest 4-connected group of such surrounded tiles. So a 3×3
+ *                     block has a yard of 1 (its centre), a 4×4 block a yard of 4 (its 2×2 core).
  *  - [uberSquare]   — side length N of the largest solid N×N block of all-claimed tiles.
  *
  * All algorithms are sparse (keyed off the claimed set), so they scale to a globe-spanning,
@@ -22,16 +25,28 @@ object SquareMetrics {
     fun stats(tiles: Set<Long>): SquareStats =
         SquareStats(total = tiles.size, yard = largestCluster(tiles), uberSquare = largestFilledSquare(tiles))
 
-    /** Size of the largest 4-connected component ("yard" / VeloViewer cluster). */
+    /** Size of the largest cluster of surrounded tiles ("yard" / VeloViewer max cluster). */
     fun largestCluster(tiles: Set<Long>): Int = largestClusterTiles(tiles).size
 
-    /** The tiles forming the largest 4-connected component (empty if none). */
+    /**
+     * The tiles forming the largest "yard": the biggest 4-connected group of *surrounded* tiles,
+     * where a tile is surrounded iff all four of its N/E/S/W neighbours are also claimed. Boundary
+     * tiles (with an unclaimed neighbour) never count. Empty if no tile is fully surrounded.
+     */
     fun largestClusterTiles(tiles: Set<Long>): Set<Long> {
         if (tiles.isEmpty()) return emptySet()
-        val visited = HashSet<Long>(tiles.size)
+        val surrounded = HashSet<Long>()
+        for (t in tiles) {
+            val x = SlippyTile.keyX(t)
+            val y = SlippyTile.keyY(t)
+            if (neighbors(x, y).all { it in tiles }) surrounded.add(t)
+        }
+        if (surrounded.isEmpty()) return emptySet()
+
+        val visited = HashSet<Long>(surrounded.size)
         val stack = ArrayDeque<Long>()
         var best: Set<Long> = emptySet()
-        for (start in tiles) {
+        for (start in surrounded) {
             if (start in visited) continue
             val component = HashSet<Long>()
             stack.addLast(start)
@@ -42,7 +57,7 @@ object SquareMetrics {
                 val x = SlippyTile.keyX(cur)
                 val y = SlippyTile.keyY(cur)
                 for (n in neighbors(x, y)) {
-                    if (n in tiles && visited.add(n)) stack.addLast(n)
+                    if (n in surrounded && visited.add(n)) stack.addLast(n)
                 }
             }
             if (component.size > best.size) best = component

@@ -57,4 +57,23 @@ class GpxTest {
         assertEquals(Gpx.contentHash(a), Gpx.contentHash(aAgain))
         assertNotEquals(Gpx.contentHash(a), Gpx.contentHash(b))
     }
+
+    @Test
+    fun geometry_hash_ignores_time_but_content_hash_does_not() {
+        val timed = listOf(TrackPoint(52.5, 13.4, null, 1_000L))
+        val differentlyTimed = listOf(TrackPoint(52.5, 13.4, null, 5_000L))
+        val timeless = listOf(TrackPoint(52.5, 13.4, null, null))
+
+        assertEquals(Gpx.geometryHash(timed), Gpx.geometryHash(differentlyTimed))
+        assertEquals(Gpx.geometryHash(timed), Gpx.geometryHash(timeless))
+        assertNotEquals(Gpx.contentHash(timed), Gpx.contentHash(differentlyTimed))
+        assertNotEquals(Gpx.contentHash(timed), Gpx.contentHash(timeless))
+    }
+
+    @Test
+    fun geometry_hash_is_discriminating_on_coordinates() {
+        val a = listOf(TrackPoint(1.0, 2.0, null, 1000L))
+        val b = listOf(TrackPoint(1.0, 2.0001, null, 9999L))
+        assertNotEquals(Gpx.geometryHash(a), Gpx.geometryHash(b))
+    }
 }

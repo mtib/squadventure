@@ -63,6 +63,9 @@ fun DetailScreen(
     LaunchedEffect(state.deleted) { if (state.deleted) onBack() }
 
     Scaffold(
+        // The outer (MainActivity) Scaffold already applies the system-bar insets; zero these so the
+        // content isn't double-inset (which left a gap below the transport-mode picker).
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 windowInsets = WindowInsets(0, 0, 0, 0),

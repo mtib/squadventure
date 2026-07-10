@@ -31,6 +31,10 @@ data class ActivityMeta(
     val startLon: Double? = null,
     /** SHA-256 of the canonical point stream; used to reject exact-duplicate imports. */
     val contentHash: String = "",
+    /** SHA-256 of coordinates only (no time); matches the same route re-imported without timestamps. */
+    val geometryHash: String = "",
+    /** Version of the derived-stats computation used to produce this record; drives lazy migration. */
+    val schemaVersion: Int = 0,
 )
 
 /** An activity together with its loaded point stream. */

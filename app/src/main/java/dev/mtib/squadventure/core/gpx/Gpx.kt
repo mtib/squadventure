@@ -79,7 +79,19 @@ object Gpx {
         return null
     }
 
-    private fun parseTime(raw: String): Long? = runCatching { ISO.parse(raw)?.time }.getOrNull()
+    /**
+     * Parses a GPX `<time>` (ISO-8601). Handles `Z`, numeric offsets (`+02:00`) and fractional
+     * seconds — which real exporters/health apps emit and the strict `...ssZ` format rejected,
+     * leaving every imported activity with a 0:00 duration.
+     */
+    private fun parseTime(raw: String): Long? {
+        val s = raw.trim()
+        return runCatching { java.time.OffsetDateTime.parse(s).toInstant().toEpochMilli() }.getOrNull()
+            ?: runCatching { java.time.Instant.parse(s).toEpochMilli() }.getOrNull()
+            ?: runCatching {
+                java.time.LocalDateTime.parse(s).toInstant(java.time.ZoneOffset.UTC).toEpochMilli()
+            }.getOrNull()
+    }
 
     fun write(points: List<TrackPoint>, name: String?): String = buildString {
         append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
@@ -104,13 +116,21 @@ object Gpx {
      * so re-importing the same track (even re-wrapped by a different exporter) is detected as a
      * duplicate.
      */
-    fun contentHash(points: List<TrackPoint>): String {
+    fun contentHash(points: List<TrackPoint>): String = hashPoints(points, includeTime = true)
+
+    /**
+     * Geometry-only hash — same rounding as [contentHash] but ignoring time — so the same route
+     * re-imported still matches even when the stored copy previously lost its timestamps.
+     */
+    fun geometryHash(points: List<TrackPoint>): String = hashPoints(points, includeTime = false)
+
+    private fun hashPoints(points: List<TrackPoint>, includeTime: Boolean): String {
         val md = MessageDigest.getInstance("SHA-256")
         val sb = StringBuilder()
         for (p in points) {
             sb.setLength(0)
-            sb.append(String.format(Locale.US, "%.7f,%.7f,", p.lat, p.lon))
-            sb.append(p.timeMs?.div(1000) ?: -1L)
+            sb.append(String.format(Locale.US, "%.7f,%.7f", p.lat, p.lon))
+            if (includeTime) sb.append(',').append(p.timeMs?.div(1000) ?: -1L)
             sb.append('\n')
             md.update(sb.toString().toByteArray(Charsets.UTF_8))
         }

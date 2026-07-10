@@ -22,9 +22,10 @@
     <string name="map_layer_squadratinhos">Squadratinhos</string>
     <string name="map_filter">Filter</string>
     <string name="map_yard">Yard</string>
-    <string name="map_mini_yard">Mini-Yard</string>
     <string name="map_ubersquare">Über-Quadrat</string>
-    <string name="map_uber_mini_square">Über-Mini-Quadrat</string>
+    <string name="map_count">Anzahl</string>
+    <string name="map_row_standard">Standard</string>
+    <string name="map_row_mini">Mini</string>
 
     <!-- Stats -->
     <string name="stat_squadrats">Quadrate</string>
@@ -65,6 +66,10 @@
     <plurals name="import_added">
         <item quantity="one">%d Aktivität importiert</item>
         <item quantity="other">%d Aktivitäten importiert</item>
+    </plurals>
+    <plurals name="import_updated">
+        <item quantity="one">%d Aktivität aktualisiert</item>
+        <item quantity="other">%d Aktivitäten aktualisiert</item>
     </plurals>
 
     <!-- Permissions -->

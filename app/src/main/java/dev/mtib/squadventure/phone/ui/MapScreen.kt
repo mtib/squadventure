@@ -8,6 +8,7 @@ import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,7 +32,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -87,23 +91,50 @@ fun MapScreen(viewModel: MapViewModel = viewModel()) {
                 }
             }
         }
-        Row(
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .background(Color.Black.copy(alpha = 0.55f))
-                .padding(vertical = 10.dp, horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            StatItem(stringResource(R.string.map_yard), state.yard.toString(), Modifier.weight(1f))
-            StatItem(stringResource(R.string.map_mini_yard), state.miniYard.toString(), Modifier.weight(1f))
-            StatItem(stringResource(R.string.map_ubersquare), state.uberSquare.toString(), Modifier.weight(1f))
-            StatItem(stringResource(R.string.map_uber_mini_square), state.uberMiniSquare.toString(), Modifier.weight(1f))
+            Row(Modifier.fillMaxWidth()) {
+                MetricCell("", 1.4f, header = true)
+                MetricCell(stringResource(R.string.map_count), 1f, header = true)
+                MetricCell(stringResource(R.string.map_yard), 1f, header = true)
+                MetricCell(stringResource(R.string.map_ubersquare), 1f, header = true)
+            }
+            Row(Modifier.fillMaxWidth()) {
+                MetricCell(stringResource(R.string.map_row_standard), 1.4f, labelColor = Squadrat)
+                MetricCell(state.claims.squadrats.size.toString(), 1f)
+                MetricCell(state.yard.toString(), 1f)
+                MetricCell(state.uberSquare.toString(), 1f)
+            }
+            Row(Modifier.fillMaxWidth()) {
+                MetricCell(stringResource(R.string.map_row_mini), 1.4f, labelColor = Squadratinho)
+                MetricCell(state.claims.squadratinhos.size.toString(), 1f)
+                MetricCell(state.miniYard.toString(), 1f)
+                MetricCell(state.uberMiniSquare.toString(), 1f)
+            }
         }
         if (state.loading) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         }
     }
+}
+
+/** One cell of the map metrics table; row labels left-aligned & tinted, values centred. */
+@Composable
+private fun RowScope.MetricCell(text: String, weight: Float, header: Boolean = false, labelColor: Color? = null) {
+    Text(
+        text = text,
+        modifier = Modifier.weight(weight),
+        color = labelColor ?: if (header) Color(0xFFB8C6BE) else Color.White,
+        fontSize = if (header) 11.sp else 15.sp,
+        fontWeight = if (header || labelColor != null) FontWeight.Normal else FontWeight.SemiBold,
+        textAlign = if (weight > 1f) TextAlign.Start else TextAlign.Center,
+    )
 }
 
 /** Most-recent last-known fix across providers, or null if no location permission / no fix. */
