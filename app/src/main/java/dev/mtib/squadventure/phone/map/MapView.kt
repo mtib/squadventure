@@ -55,10 +55,18 @@ import org.maplibre.geojson.Polygon
 import java.util.concurrent.atomic.AtomicReference
 import org.maplibre.android.maps.MapView as NativeMapView
 
-/** Claimed squares to overlay: [squadratinhos] (z17) and [squadrats] (z14), as packed tile keys. */
+/**
+ * Claimed squares to overlay: [squadratinhos] (z17) and [squadrats] (z14), plus the tiles making up
+ * the largest cluster ("yard") and largest solid block ("übersquare") at each level, all as packed
+ * tile keys.
+ */
 data class MapClaims(
     val squadrats: Set<Long> = emptySet(),
     val squadratinhos: Set<Long> = emptySet(),
+    val yardSquadrats: Set<Long> = emptySet(),
+    val yardSquadratinhos: Set<Long> = emptySet(),
+    val uberSquadrats: Set<Long> = emptySet(),
+    val uberSquadratinhos: Set<Long> = emptySet(),
 )
 
 /**
@@ -154,6 +162,7 @@ fun MapView(
         val loadedStyle = style ?: return@LaunchedEffect
         ensureOverlayLayers(loadedStyle)
         updateSquareLayers(loadedStyle, claims, showSquares)
+        updateHighlightLayers(loadedStyle, claims, showSquares)
         updateTrailLayers(loadedStyle, routes, showHeatmap)
         updateLiveRouteLayer(loadedStyle, liveRoute)
         updateCurrentLocationLayer(loadedStyle, currentLocation)
@@ -247,6 +256,8 @@ private const val CURRENT_LOCATION_STROKE_WIDTH_PX = 2f
 
 private const val SOURCE_SQUADRATS = "squadventure-squadrats"
 private const val SOURCE_SQUADRATINHOS = "squadventure-squadratinhos"
+private const val SOURCE_YARD = "squadventure-yard"
+private const val SOURCE_UBER = "squadventure-uber"
 private const val SOURCE_HEATMAP_IMAGE = "squadventure-heat-img"
 private const val SOURCE_ROUTE = "squadventure-route"
 private const val SOURCE_LIVE = "squadventure-live"
@@ -254,10 +265,18 @@ private const val SOURCE_CURRENT_LOCATION = "squadventure-current-location"
 
 private const val LAYER_SQUADRATS = "squadventure-squadrats-fill"
 private const val LAYER_SQUADRATINHOS = "squadventure-squadratinhos-fill"
+private const val LAYER_YARD = "squadventure-yard-fill"
+private const val LAYER_SQUADRATS_EDGE = "squadventure-squadrats-edge"
+private const val LAYER_SQUADRATINHOS_EDGE = "squadventure-squadratinhos-edge"
+private const val LAYER_UBER = "squadventure-uber-line"
 private const val LAYER_HEATMAP_RASTER = "squadventure-heat-img-layer"
 private const val LAYER_ROUTE = "squadventure-route"
 private const val LAYER_LIVE = "squadventure-live"
 private const val LAYER_CURRENT_LOCATION = "squadventure-current-location"
+
+private const val SQUADRATS_EDGE_WIDTH_PX = 1.4f
+private const val SQUADRATINHOS_EDGE_WIDTH_PX = 0.9f
+private const val UBER_LINE_WIDTH_PX = 2.6f
 
 private fun initialCameraPosition(focus: TrackPoint?): CameraPosition =
     if (focus != null) {
@@ -284,7 +303,6 @@ private fun ensureOverlayLayers(style: Style) {
         style.addLayer(
             FillLayer(LAYER_SQUADRATS, SOURCE_SQUADRATS).withProperties(
                 PropertyFactory.fillColor(Squadrat.copy(alpha = 0.12f).toArgb()),
-                PropertyFactory.fillOutlineColor(Squadrat.copy(alpha = 0.8f).toArgb()),
             ),
         )
     }
@@ -293,6 +311,44 @@ private fun ensureOverlayLayers(style: Style) {
         style.addLayer(
             FillLayer(LAYER_SQUADRATINHOS, SOURCE_SQUADRATINHOS).withProperties(
                 PropertyFactory.fillColor(Squadratinho.copy(alpha = 0.35f).toArgb()),
+            ),
+        )
+    }
+    if (style.getSource(SOURCE_YARD) == null) {
+        style.addSource(GeoJsonSource(SOURCE_YARD))
+        style.addLayer(
+            FillLayer(LAYER_YARD, SOURCE_YARD).withProperties(
+                PropertyFactory.fillColor(Trail.copy(alpha = 0.25f).toArgb()),
+            ),
+        )
+    }
+    if (style.getLayer(LAYER_SQUADRATS_EDGE) == null) {
+        style.addLayer(
+            LineLayer(LAYER_SQUADRATS_EDGE, SOURCE_SQUADRATS).withProperties(
+                PropertyFactory.lineColor(Squadrat.copy(alpha = 0.9f).toArgb()),
+                PropertyFactory.lineWidth(SQUADRATS_EDGE_WIDTH_PX),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            ),
+        )
+    }
+    if (style.getLayer(LAYER_SQUADRATINHOS_EDGE) == null) {
+        style.addLayer(
+            LineLayer(LAYER_SQUADRATINHOS_EDGE, SOURCE_SQUADRATINHOS).withProperties(
+                PropertyFactory.lineColor(Squadratinho.copy(alpha = 0.85f).toArgb()),
+                PropertyFactory.lineWidth(SQUADRATINHOS_EDGE_WIDTH_PX),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            ),
+        )
+    }
+    if (style.getSource(SOURCE_UBER) == null) {
+        style.addSource(GeoJsonSource(SOURCE_UBER))
+        style.addLayer(
+            LineLayer(LAYER_UBER, SOURCE_UBER).withProperties(
+                PropertyFactory.lineColor(android.graphics.Color.argb(230, 255, 255, 255)),
+                PropertyFactory.lineWidth(UBER_LINE_WIDTH_PX),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
             ),
         )
     }
@@ -336,10 +392,24 @@ private fun updateSquareLayers(style: Style, claims: MapClaims, showSquares: Boo
     val visibility = PropertyFactory.visibility(if (showSquares) Property.VISIBLE else Property.NONE)
     style.getLayerAs<FillLayer>(LAYER_SQUADRATS)?.setProperties(visibility)
     style.getLayerAs<FillLayer>(LAYER_SQUADRATINHOS)?.setProperties(visibility)
+    style.getLayerAs<LineLayer>(LAYER_SQUADRATS_EDGE)?.setProperties(visibility)
+    style.getLayerAs<LineLayer>(LAYER_SQUADRATINHOS_EDGE)?.setProperties(visibility)
     style.getSourceAs<GeoJsonSource>(SOURCE_SQUADRATS)
         ?.setGeoJson(tileFeatureCollection(claims.squadrats, SlippyTile.ZOOM_SQUADRAT))
     style.getSourceAs<GeoJsonSource>(SOURCE_SQUADRATINHOS)
         ?.setGeoJson(tileFeatureCollection(claims.squadratinhos, SlippyTile.ZOOM_SQUADRATINHO))
+}
+
+/** The largest-cluster ("yard") and largest-solid-block ("übersquare") highlights, each combining both zoom levels into one source. */
+private fun updateHighlightLayers(style: Style, claims: MapClaims, showSquares: Boolean) {
+    if (!style.isFullyLoaded) return
+    val visibility = PropertyFactory.visibility(if (showSquares) Property.VISIBLE else Property.NONE)
+    style.getLayerAs<FillLayer>(LAYER_YARD)?.setProperties(visibility)
+    style.getLayerAs<LineLayer>(LAYER_UBER)?.setProperties(visibility)
+    style.getSourceAs<GeoJsonSource>(SOURCE_YARD)
+        ?.setGeoJson(combinedTileFeatureCollection(claims.yardSquadrats, claims.yardSquadratinhos))
+    style.getSourceAs<GeoJsonSource>(SOURCE_UBER)
+        ?.setGeoJson(combinedTileFeatureCollection(claims.uberSquadrats, claims.uberSquadratinhos))
 }
 
 private fun updateTrailLayers(style: Style, routes: List<List<TrackPoint>>, showHeatmap: Boolean) {
@@ -398,6 +468,13 @@ private fun updateCurrentLocationLayer(style: Style, currentLocation: TrackPoint
 private fun tileFeatureCollection(keys: Set<Long>, zoom: Int): FeatureCollection {
     val features = keys.map { key -> Feature.fromGeometry(tilePolygon(SlippyTile.keyX(key), SlippyTile.keyY(key), zoom)) }
     return FeatureCollection.fromFeatures(features)
+}
+
+/** Merges a z14 and a z17 tile set into one [FeatureCollection] so both levels render from a single source. */
+private fun combinedTileFeatureCollection(squadratKeys: Set<Long>, squadratinhoKeys: Set<Long>): FeatureCollection {
+    val squadratFeatures = tileFeatureCollection(squadratKeys, SlippyTile.ZOOM_SQUADRAT).features().orEmpty()
+    val squadratinhoFeatures = tileFeatureCollection(squadratinhoKeys, SlippyTile.ZOOM_SQUADRATINHO).features().orEmpty()
+    return FeatureCollection.fromFeatures(squadratFeatures + squadratinhoFeatures)
 }
 
 private fun tilePolygon(x: Int, y: Int, zoom: Int): Polygon {

@@ -66,4 +66,19 @@ class SquareMetricsTest {
         assertEquals(2, s.total)
         assertEquals(1, s.yard)
     }
+
+    @Test
+    fun largest_cluster_tiles_are_the_connected_run() {
+        val cluster = SquareMetrics.largestClusterTiles(tiles(100 to 100, 0 to 0, 1 to 0, 2 to 0))
+        assertEquals(setOf(key(0, 0), key(1, 0), key(2, 0)), cluster)
+    }
+
+    @Test
+    fun largest_filled_square_tiles_are_the_solid_block() {
+        // A 2x2 block at (0,0) plus an extra tile that doesn't extend the square.
+        val block = SquareMetrics.largestFilledSquareTiles(tiles(0 to 0, 1 to 0, 0 to 1, 1 to 1, 2 to 0))
+        assertEquals(4, block.size)
+        assertEquals(setOf(key(0, 0), key(1, 0), key(0, 1), key(1, 1)), block)
+        assertEquals(2, SquareMetrics.largestFilledSquare(tiles(0 to 0, 1 to 0, 0 to 1, 1 to 1, 2 to 0)))
+    }
 }

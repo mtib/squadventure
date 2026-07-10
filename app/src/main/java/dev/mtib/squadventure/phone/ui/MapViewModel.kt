@@ -55,13 +55,24 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
             val squadrats = TileClaims.squadratsFromSquadratinhos(squadratinhos)
             val bigStats = SquareMetrics.stats(squadrats)
             val smallStats = SquareMetrics.stats(squadratinhos)
+            val yardSquadrats = SquareMetrics.largestClusterTiles(squadrats)
+            val yardSquadratinhos = SquareMetrics.largestClusterTiles(squadratinhos)
+            val uberSquadrats = SquareMetrics.largestFilledSquareTiles(squadrats)
+            val uberSquadratinhos = SquareMetrics.largestFilledSquareTiles(squadratinhos)
             val routes = if (showHeatmap) {
                 repo.list().filter { modes == null || it.transportMode in modes }.map { repo.loadPoints(it.id) }
             } else {
                 emptyList()
             }
             _state.value = _state.value.copy(
-                claims = MapClaims(squadrats = squadrats, squadratinhos = squadratinhos),
+                claims = MapClaims(
+                    squadrats = squadrats,
+                    squadratinhos = squadratinhos,
+                    yardSquadrats = yardSquadrats,
+                    yardSquadratinhos = yardSquadratinhos,
+                    uberSquadrats = uberSquadrats,
+                    uberSquadratinhos = uberSquadratinhos,
+                ),
                 routes = routes,
                 loading = false,
                 yard = bigStats.yard,

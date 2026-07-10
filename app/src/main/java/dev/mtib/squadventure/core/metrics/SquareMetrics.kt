@@ -22,41 +22,52 @@ object SquareMetrics {
     fun stats(tiles: Set<Long>): SquareStats =
         SquareStats(total = tiles.size, yard = largestCluster(tiles), uberSquare = largestFilledSquare(tiles))
 
-    /** Largest 4-connected component ("yard" / VeloViewer cluster). */
-    fun largestCluster(tiles: Set<Long>): Int {
-        if (tiles.isEmpty()) return 0
+    /** Size of the largest 4-connected component ("yard" / VeloViewer cluster). */
+    fun largestCluster(tiles: Set<Long>): Int = largestClusterTiles(tiles).size
+
+    /** The tiles forming the largest 4-connected component (empty if none). */
+    fun largestClusterTiles(tiles: Set<Long>): Set<Long> {
+        if (tiles.isEmpty()) return emptySet()
         val visited = HashSet<Long>(tiles.size)
         val stack = ArrayDeque<Long>()
-        var best = 0
+        var best: Set<Long> = emptySet()
         for (start in tiles) {
             if (start in visited) continue
-            var size = 0
+            val component = HashSet<Long>()
             stack.addLast(start)
             visited.add(start)
             while (stack.isNotEmpty()) {
                 val cur = stack.removeLast()
-                size++
+                component.add(cur)
                 val x = SlippyTile.keyX(cur)
                 val y = SlippyTile.keyY(cur)
                 for (n in neighbors(x, y)) {
                     if (n in tiles && visited.add(n)) stack.addLast(n)
                 }
             }
-            if (size > best) best = size
+            if (component.size > best.size) best = component
         }
         return best
     }
 
-    /**
-     * Side length N of the largest solid N×N block ("übersquadrat" / max square). Sparse
-     * maximal-square DP: process cells in (y, x) order so the up / left / up-left neighbours are
-     * already solved; dp = 1 + min(left, up, upLeft) for occupied cells.
-     */
+    /** Side length N of the largest solid N×N block ("übersquadrat" / max square). */
     fun largestFilledSquare(tiles: Set<Long>): Int {
-        if (tiles.isEmpty()) return 0
+        val t = largestFilledSquareTiles(tiles)
+        return if (t.isEmpty()) 0 else Math.round(Math.sqrt(t.size.toDouble())).toInt()
+    }
+
+    /**
+     * The tiles forming the largest solid N×N block. Sparse maximal-square DP: process cells in
+     * (y, x) order so the up / left / up-left neighbours are already solved; dp = 1 + min(left, up,
+     * upLeft) for occupied cells. Tracks the bottom-right cell of the best square, then enumerates it.
+     */
+    fun largestFilledSquareTiles(tiles: Set<Long>): Set<Long> {
+        if (tiles.isEmpty()) return emptySet()
         val ordered = tiles.sortedWith(compareBy({ SlippyTile.keyY(it) }, { SlippyTile.keyX(it) }))
         val dp = HashMap<Long, Int>(tiles.size)
-        var best = 0
+        var bestSide = 0
+        var bestX = 0
+        var bestY = 0
         for (cur in ordered) {
             val x = SlippyTile.keyX(cur)
             val y = SlippyTile.keyY(cur)
@@ -65,9 +76,20 @@ object SquareMetrics {
             val upLeft = dp[SlippyTile.key(x - 1, y - 1)] ?: 0
             val side = 1 + minOf(left, up, upLeft)
             dp[cur] = side
-            if (side > best) best = side
+            if (side > bestSide) {
+                bestSide = side
+                bestX = x
+                bestY = y
+            }
         }
-        return best
+        if (bestSide == 0) return emptySet()
+        val out = HashSet<Long>(bestSide * bestSide)
+        for (dy in 0 until bestSide) {
+            for (dx in 0 until bestSide) {
+                out.add(SlippyTile.key(bestX - dx, bestY - dy))
+            }
+        }
+        return out
     }
 
     private fun neighbors(x: Int, y: Int): LongArray = longArrayOf(
