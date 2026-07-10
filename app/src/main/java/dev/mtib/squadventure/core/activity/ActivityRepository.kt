@@ -29,7 +29,7 @@ sealed interface ImportResult {
  */
 class ActivityRepository(context: Context) {
 
-    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
+    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; coerceInputValues = true }
     private val root: File = File(context.filesDir, "activities").apply { mkdirs() }
 
     fun list(): List<ActivityMeta> =

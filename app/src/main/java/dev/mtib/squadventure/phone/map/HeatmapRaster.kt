@@ -25,16 +25,16 @@ data class HeatmapRaster(val bitmap: Bitmap, val quad: LatLngQuad)
 object HeatmapRenderer {
     private const val MAX_BITMAP_DIMENSION = 1024
     private const val MARGIN_PX = 48
-    private const val STAMP_RADIUS_PX = 3
+    private const val STAMP_RADIUS_PX = 2
     private const val BLUR_PASSES = 3
     private const val HEATMAP_MAX_COUNT = 6f
 
-    private val INFERNO_STOPS = listOf(
-        0.0f to Triple(0, 0, 4),
-        0.25f to Triple(87, 16, 110),
-        0.5f to Triple(188, 55, 84),
-        0.75f to Triple(249, 142, 9),
-        1.0f to Triple(252, 255, 164),
+    /** Cool ramp aligned to the app palette (Trail blue → Squadrat green → near-white). */
+    private val HEAT_STOPS = listOf(
+        0.0f to Triple(12, 60, 90),
+        0.3f to Triple(124, 199, 255),
+        0.65f to Triple(91, 217, 138),
+        1.0f to Triple(233, 255, 240),
     )
 
     /**
@@ -90,7 +90,7 @@ object HeatmapRenderer {
         val pixels = IntArray(w * h)
         for (i in pixels.indices) {
             val t = sqrt((field[i] / logMax).coerceIn(0f, 1f))
-            pixels[i] = infernoArgb(t)
+            pixels[i] = heatArgb(t)
         }
         val bitmap = Bitmap.createBitmap(pixels, w, h, Bitmap.Config.ARGB_8888)
 
@@ -194,13 +194,13 @@ object HeatmapRenderer {
         return out
     }
 
-    private fun infernoArgb(t: Float): Int {
-        var lo = INFERNO_STOPS.first()
-        var hi = INFERNO_STOPS.last()
-        for (i in 0 until INFERNO_STOPS.size - 1) {
-            if (t >= INFERNO_STOPS[i].first && t <= INFERNO_STOPS[i + 1].first) {
-                lo = INFERNO_STOPS[i]
-                hi = INFERNO_STOPS[i + 1]
+    private fun heatArgb(t: Float): Int {
+        var lo = HEAT_STOPS.first()
+        var hi = HEAT_STOPS.last()
+        for (i in 0 until HEAT_STOPS.size - 1) {
+            if (t >= HEAT_STOPS[i].first && t <= HEAT_STOPS[i + 1].first) {
+                lo = HEAT_STOPS[i]
+                hi = HEAT_STOPS[i + 1]
                 break
             }
         }

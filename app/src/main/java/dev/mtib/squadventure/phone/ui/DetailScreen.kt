@@ -102,7 +102,7 @@ fun DetailScreen(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     claims = state.claims,
                     routes = listOf(state.points),
-                    focus = state.points.firstOrNull(),
+                    fitPoints = state.points,
                     showSquares = true,
                 )
                 Column(Modifier.padding(16.dp)) {

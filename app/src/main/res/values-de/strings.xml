@@ -12,7 +12,7 @@
     <string name="mode_walk">Zu Fuß</string>
     <string name="mode_bike">Fahrrad</string>
     <string name="mode_car">Auto</string>
-    <string name="mode_both">Kombiniert</string>
+    <string name="mode_boat">Boot</string>
     <string name="mode_other">Andere</string>
     <string name="filter_all">Alle</string>
 

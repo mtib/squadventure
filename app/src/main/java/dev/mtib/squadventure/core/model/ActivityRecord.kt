@@ -19,7 +19,7 @@ enum class ActivitySource {
 data class ActivityMeta(
     val id: String,
     val createdAt: Long,
-    val transportMode: TransportMode,
+    val transportMode: TransportMode = TransportMode.OTHER,
     val source: ActivitySource,
     val title: String? = null,
     val distanceMeters: Double = 0.0,

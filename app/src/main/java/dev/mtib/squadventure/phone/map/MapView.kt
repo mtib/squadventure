@@ -26,11 +26,13 @@ import dev.mtib.squadventure.phone.ui.Squadratinho
 import dev.mtib.squadventure.phone.ui.Trail
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.CircleLayer
@@ -80,6 +82,8 @@ fun MapView(
     showSquares: Boolean = true,
     focus: TrackPoint? = null,
     currentLocation: TrackPoint? = null,
+    liveRoute: List<TrackPoint>? = null,
+    fitPoints: List<TrackPoint>? = null,
 ) {
     val context = LocalContext.current
     val mapView = rememberMapViewWithLifecycle()
@@ -106,7 +110,7 @@ fun MapView(
         val map = maplibreMap
         if (map != null && !cameraInitialized) {
             cameraInitialized = true
-            map.cameraPosition = initialCameraPosition(focus)
+            map.cameraPosition = fitCameraForPoints(map, fitPoints) ?: initialCameraPosition(focus)
         }
     }
 
@@ -115,14 +119,14 @@ fun MapView(
     val refreshHeatmap = rememberUpdatedState {
         val map = maplibreMap
         val loadedStyle = style
-        if (map == null || loadedStyle == null || !showHeatmap) return@rememberUpdatedState
+        if (map == null || loadedStyle == null || !loadedStyle.isFullyLoaded || !showHeatmap) return@rememberUpdatedState
         val visibleRoutes = routes
         val bounds = map.projection.visibleRegion.latLngBounds
         heatmapJob.get()?.cancel()
         heatmapJob.set(
             heatmapScope.launch {
                 val raster = withContext(Dispatchers.Default) { HeatmapRenderer.render(bounds, visibleRoutes) }
-                if (raster != null) applyHeatmapRaster(loadedStyle, raster)
+                if (raster != null && isActive && loadedStyle.isFullyLoaded) applyHeatmapRaster(loadedStyle, raster)
             },
         )
     }
@@ -135,11 +139,12 @@ fun MapView(
         onDispose { map.removeOnCameraIdleListener(listener) }
     }
 
-    LaunchedEffect(style, claims, routes, showHeatmap, showSquares, currentLocation) {
+    LaunchedEffect(style, claims, routes, showHeatmap, showSquares, currentLocation, liveRoute) {
         val loadedStyle = style ?: return@LaunchedEffect
         ensureOverlayLayers(loadedStyle)
         updateSquareLayers(loadedStyle, claims, showSquares)
         updateTrailLayers(loadedStyle, routes, showHeatmap)
+        updateLiveRouteLayer(loadedStyle, liveRoute)
         updateCurrentLocationLayer(loadedStyle, currentLocation)
         if (showHeatmap) refreshHeatmap.value()
     }
@@ -226,12 +231,14 @@ private const val SOURCE_SQUADRATS = "squadventure-squadrats"
 private const val SOURCE_SQUADRATINHOS = "squadventure-squadratinhos"
 private const val SOURCE_HEATMAP_IMAGE = "squadventure-heat-img"
 private const val SOURCE_ROUTE = "squadventure-route"
+private const val SOURCE_LIVE = "squadventure-live"
 private const val SOURCE_CURRENT_LOCATION = "squadventure-current-location"
 
 private const val LAYER_SQUADRATS = "squadventure-squadrats-fill"
 private const val LAYER_SQUADRATINHOS = "squadventure-squadratinhos-fill"
 private const val LAYER_HEATMAP_RASTER = "squadventure-heat-img-layer"
 private const val LAYER_ROUTE = "squadventure-route"
+private const val LAYER_LIVE = "squadventure-live"
 private const val LAYER_CURRENT_LOCATION = "squadventure-current-location"
 
 private fun initialCameraPosition(focus: TrackPoint?): CameraPosition =
@@ -241,8 +248,19 @@ private fun initialCameraPosition(focus: TrackPoint?): CameraPosition =
         CameraPosition.Builder().target(LatLng(0.0, 0.0)).zoom(WORLD_ZOOM).build()
     }
 
+/** Camera that frames the whole [points] bounding box (with padding), or null if not framable. */
+private fun fitCameraForPoints(map: MapLibreMap, points: List<TrackPoint>?): CameraPosition? {
+    if (points == null || points.size < 2) return null
+    val builder = LatLngBounds.Builder()
+    for (p in points) builder.include(LatLng(p.lat, p.lon))
+    val bounds = runCatching { builder.build() }.getOrNull() ?: return null
+    val pad = 120
+    return runCatching { map.getCameraForLatLngBounds(bounds, intArrayOf(pad, pad, pad, pad)) }.getOrNull()
+}
+
 /** Idempotent: adds each source/layer once (checked by source id), above whatever the basemap style already has. */
 private fun ensureOverlayLayers(style: Style) {
+    if (!style.isFullyLoaded) return
     if (style.getSource(SOURCE_SQUADRATS) == null) {
         style.addSource(GeoJsonSource(SOURCE_SQUADRATS))
         style.addLayer(
@@ -271,6 +289,17 @@ private fun ensureOverlayLayers(style: Style) {
             ),
         )
     }
+    if (style.getSource(SOURCE_LIVE) == null) {
+        style.addSource(GeoJsonSource(SOURCE_LIVE))
+        style.addLayer(
+            LineLayer(LAYER_LIVE, SOURCE_LIVE).withProperties(
+                PropertyFactory.lineColor(Squadrat.toArgb()),
+                PropertyFactory.lineWidth(ROUTE_LINE_WIDTH_PX),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            ),
+        )
+    }
     if (style.getSource(SOURCE_CURRENT_LOCATION) == null) {
         style.addSource(GeoJsonSource(SOURCE_CURRENT_LOCATION))
         style.addLayer(
@@ -285,6 +314,7 @@ private fun ensureOverlayLayers(style: Style) {
 }
 
 private fun updateSquareLayers(style: Style, claims: MapClaims, showSquares: Boolean) {
+    if (!style.isFullyLoaded) return
     val visibility = PropertyFactory.visibility(if (showSquares) Property.VISIBLE else Property.NONE)
     style.getLayerAs<FillLayer>(LAYER_SQUADRATS)?.setProperties(visibility)
     style.getLayerAs<FillLayer>(LAYER_SQUADRATINHOS)?.setProperties(visibility)
@@ -295,6 +325,7 @@ private fun updateSquareLayers(style: Style, claims: MapClaims, showSquares: Boo
 }
 
 private fun updateTrailLayers(style: Style, routes: List<List<TrackPoint>>, showHeatmap: Boolean) {
+    if (!style.isFullyLoaded) return
     style.getLayerAs<LineLayer>(LAYER_ROUTE)
         ?.setProperties(PropertyFactory.visibility(if (showHeatmap) Property.NONE else Property.VISIBLE))
     style.getLayerAs<RasterLayer>(LAYER_HEATMAP_RASTER)
@@ -310,6 +341,7 @@ private fun updateTrailLayers(style: Style, routes: List<List<TrackPoint>>, show
  * the bitmap and re-anchors its geo quad in place.
  */
 private fun applyHeatmapRaster(style: Style, raster: HeatmapRaster) {
+    if (!style.isFullyLoaded) return
     val existingSource = style.getSourceAs<ImageSource>(SOURCE_HEATMAP_IMAGE)
     if (existingSource != null) {
         existingSource.setImage(raster.bitmap)
@@ -328,7 +360,18 @@ private fun applyHeatmapRaster(style: Style, raster: HeatmapRaster) {
     }
 }
 
+/** The in-progress recording's track, drawn as a solid line on top of squares/heatmap/route. */
+private fun updateLiveRouteLayer(style: Style, liveRoute: List<TrackPoint>?) {
+    if (!style.isFullyLoaded) return
+    val hasRoute = liveRoute != null && liveRoute.size >= 2
+    style.getLayerAs<LineLayer>(LAYER_LIVE)
+        ?.setProperties(PropertyFactory.visibility(if (hasRoute) Property.VISIBLE else Property.NONE))
+    style.getSourceAs<GeoJsonSource>(SOURCE_LIVE)
+        ?.setGeoJson(routeFeatureCollection(if (hasRoute) listOf(liveRoute!!) else emptyList()))
+}
+
 private fun updateCurrentLocationLayer(style: Style, currentLocation: TrackPoint?) {
+    if (!style.isFullyLoaded) return
     style.getLayerAs<CircleLayer>(LAYER_CURRENT_LOCATION)
         ?.setProperties(PropertyFactory.visibility(if (currentLocation != null) Property.VISIBLE else Property.NONE))
     style.getSourceAs<GeoJsonSource>(SOURCE_CURRENT_LOCATION)?.setGeoJson(currentLocationFeatureCollection(currentLocation))

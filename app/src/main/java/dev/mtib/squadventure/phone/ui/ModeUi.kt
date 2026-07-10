@@ -5,9 +5,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.DirectionsBoat
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material3.FilterChip
@@ -26,7 +26,7 @@ fun TransportMode.icon(): ImageVector = when (this) {
     TransportMode.WALK -> Icons.AutoMirrored.Filled.DirectionsWalk
     TransportMode.BIKE -> Icons.AutoMirrored.Filled.DirectionsBike
     TransportMode.CAR -> Icons.Filled.DirectionsCar
-    TransportMode.BOTH -> Icons.AutoMirrored.Filled.CompareArrows
+    TransportMode.BOAT -> Icons.Filled.DirectionsBoat
     TransportMode.OTHER -> Icons.Filled.MoreHoriz
 }
 
@@ -34,7 +34,7 @@ fun TransportMode.labelRes(): Int = when (this) {
     TransportMode.WALK -> R.string.mode_walk
     TransportMode.BIKE -> R.string.mode_bike
     TransportMode.CAR -> R.string.mode_car
-    TransportMode.BOTH -> R.string.mode_both
+    TransportMode.BOAT -> R.string.mode_boat
     TransportMode.OTHER -> R.string.mode_other
 }
 

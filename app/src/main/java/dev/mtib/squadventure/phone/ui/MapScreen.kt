@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -69,8 +68,7 @@ fun MapScreen(viewModel: MapViewModel = viewModel()) {
         Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .statusBarsPadding()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             TransportModeChips(selected = state.filter, onSelect = viewModel::setFilter, showAll = true)
@@ -92,7 +90,7 @@ fun MapScreen(viewModel: MapViewModel = viewModel()) {
 }
 
 /** Most-recent last-known fix across providers, or null if no location permission / no fix. */
-private fun lastKnownLocation(context: Context): TrackPoint? {
+internal fun lastKnownLocation(context: Context): TrackPoint? {
     val granted = { p: String -> ContextCompat.checkSelfPermission(context, p) == PackageManager.PERMISSION_GRANTED }
     if (!granted(Manifest.permission.ACCESS_FINE_LOCATION) && !granted(Manifest.permission.ACCESS_COARSE_LOCATION)) {
         return null

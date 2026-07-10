@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,10 +34,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import dev.mtib.squadventure.R
+import dev.mtib.squadventure.core.activity.ActivityRepository
+import dev.mtib.squadventure.core.geo.TileClaims
+import dev.mtib.squadventure.core.model.TrackPoint
 import dev.mtib.squadventure.core.model.TransportMode
 import dev.mtib.squadventure.core.tracking.TrackingController
 import dev.mtib.squadventure.phone.TrackingService
+import dev.mtib.squadventure.phone.map.MapClaims
 import dev.mtib.squadventure.phone.map.MapView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun RecordScreen() {
@@ -50,6 +57,24 @@ fun RecordScreen() {
     var selectedMode by rememberSaveable { mutableStateOf(TransportMode.WALK) }
     var showBackgroundRationale by remember { mutableStateOf(false) }
     var askedBackground by rememberSaveable { mutableStateOf(false) }
+
+    var modeClaims by remember { mutableStateOf(MapClaims()) }
+    var modeRoutes by remember { mutableStateOf<List<List<TrackPoint>>>(emptyList()) }
+    // Center the live map on the user right away (before the first fix arrives) so the matching
+    // squares/heatmap are visible instead of a world-zoom view.
+    val lastKnown = remember { lastKnownLocation(context) }
+
+    LaunchedEffect(selectedMode, isTracking) {
+        if (!isTracking) return@LaunchedEffect
+        withContext(Dispatchers.IO) {
+            val repo = ActivityRepository(context)
+            val squadratinhos = repo.allSquadratinhoKeys(setOf(selectedMode))
+            val squadrats = TileClaims.squadratsFromSquadratinhos(squadratinhos)
+            val routes = repo.list().filter { it.transportMode == selectedMode }.map { repo.loadPoints(it.id) }
+            modeClaims = MapClaims(squadrats = squadrats, squadratinhos = squadratinhos)
+            modeRoutes = routes
+        }
+    }
 
     fun granted(permission: String) =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
@@ -119,10 +144,13 @@ fun RecordScreen() {
         Column(Modifier.fillMaxSize()) {
             MapView(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                routes = listOf(path),
-                focus = path.firstOrNull(),
+                claims = modeClaims,
+                routes = modeRoutes,
+                showHeatmap = true,
                 showSquares = true,
-                currentLocation = path.lastOrNull(),
+                liveRoute = path,
+                currentLocation = path.lastOrNull() ?: lastKnown,
+                focus = path.firstOrNull() ?: lastKnown,
             )
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),

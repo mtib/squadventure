@@ -11,6 +11,6 @@ enum class TransportMode {
     WALK,
     BIKE,
     CAR,
-    BOTH,
+    BOAT,
     OTHER,
 }
