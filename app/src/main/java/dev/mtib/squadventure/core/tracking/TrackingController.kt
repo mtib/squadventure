@@ -36,6 +36,10 @@ object TrackingController {
 
     private var startedAtMs = 0L
 
+    /** Last point distance was accrued to; the live counter uses the same movement dead-band as the
+     * saved distance ([Geo.denoisedDistanceMeters]) so stationary GPS jitter doesn't inflate it. */
+    private var distanceAnchor: TrackPoint? = null
+
     @Synchronized
     fun start(mode: TransportMode, startedAtMs: Long) {
         reset()
@@ -52,8 +56,15 @@ object TrackingController {
     fun onLocation(point: TrackPoint) {
         if (!_isTracking.value) return
         val current = _path.value
-        current.lastOrNull()?.let { prev ->
-            _distanceMeters.value += Geo.haversineMeters(prev.lat, prev.lon, point.lat, point.lon)
+        val anchor = distanceAnchor
+        if (anchor == null) {
+            distanceAnchor = point
+        } else {
+            val step = Geo.haversineMeters(anchor.lat, anchor.lon, point.lat, point.lon)
+            if (step >= Geo.DEADBAND_MIN_STEP_METERS) {
+                _distanceMeters.value += step
+                distanceAnchor = point
+            }
         }
         _path.value = current + point
         val key = SlippyTile.squadratinhoOf(point.lat, point.lon)
@@ -82,5 +93,6 @@ object TrackingController {
         _path.value = emptyList()
         _liveSquadratinhos.value = emptySet()
         startedAtMs = 0L
+        distanceAnchor = null
     }
 }

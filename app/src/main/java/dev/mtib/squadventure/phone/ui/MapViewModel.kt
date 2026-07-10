@@ -60,7 +60,7 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
             val uberSquadrats = SquareMetrics.largestFilledSquareTiles(squadrats)
             val uberSquadratinhos = SquareMetrics.largestFilledSquareTiles(squadratinhos)
             val routes = if (showHeatmap) {
-                repo.list().filter { modes == null || it.transportMode in modes }.map { repo.loadPoints(it.id) }
+                repo.list().filter { modes == null || it.transportMode in modes }.map { repo.loadDisplayPoints(it.id) }
             } else {
                 emptyList()
             }

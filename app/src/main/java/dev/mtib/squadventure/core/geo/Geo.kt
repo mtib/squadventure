@@ -11,6 +11,12 @@ import kotlin.math.sqrt
 object Geo {
     private const val EARTH_RADIUS_METERS = 6_371_008.8
 
+    /** Odd window (points) for the median smoother; 5 rejects isolated 1-2 sample spikes. */
+    const val SMOOTH_WINDOW = 5
+
+    /** Movement required before distance accrues again, absorbing consumer-GPS stationary jitter. */
+    const val DEADBAND_MIN_STEP_METERS = 8.0
+
     /** Great-circle distance between two coordinates in meters (haversine). */
     fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val dLat = Math.toRadians(lat2 - lat1)
@@ -85,6 +91,59 @@ object Geo {
         }
 
         return points.filterIndexed { i, _ -> keep[i] }
+    }
+
+    /**
+     * Median-smooths a GPS track to suppress fix jitter and reject isolated spikes before distance
+     * or display geometry is derived. Each output point takes the per-axis median of a small window
+     * centred on it, so a lone teleport fix is the window's extreme (not its median) and is
+     * discarded; point count, order, elevation and the centre point's timestamp are preserved.
+     * Douglas–Peucker cannot do this — it only drops points collinear with the line, whereas jitter
+     * zigzags deviate from the chord and survive — so noisy tracks must be smoothed first.
+     */
+    fun smooth(points: List<TrackPoint>, window: Int = SMOOTH_WINDOW): List<TrackPoint> {
+        if (points.size <= 2 || window <= 1) return points
+        val half = window / 2
+        val lats = DoubleArray(points.size) { points[it].lat }
+        val lons = DoubleArray(points.size) { points[it].lon }
+        return List(points.size) { i ->
+            val lo = (i - half).coerceAtLeast(0)
+            val hi = (i + half).coerceAtMost(points.size - 1)
+            points[i].copy(lat = median(lats, lo, hi), lon = median(lons, lo, hi))
+        }
+    }
+
+    private fun median(values: DoubleArray, lo: Int, hi: Int): Double {
+        val slice = values.copyOfRange(lo, hi + 1).also { it.sort() }
+        val n = slice.size
+        return if (n % 2 == 1) slice[n / 2] else (slice[n / 2 - 1] + slice[n / 2]) / 2.0
+    }
+
+    /**
+     * Distance in metres robust to stationary GPS jitter and spikes: the track is [smooth]ed, then
+     * walked with a movement dead-band — a new anchor is only taken once the receiver has moved
+     * [minStepMeters] from the last one, so a stationary receiver's noise contributes nothing — and
+     * the dead-banded polyline's great-circle length is summed. Replaces summing a Douglas–Peucker
+     * line, which leaves jitter-inflated length intact (a stationary noisy fix cloud reads as
+     * kilometres). Endpoints of genuine movement are preserved to within [minStepMeters].
+     */
+    fun denoisedDistanceMeters(
+        points: List<TrackPoint>,
+        minStepMeters: Double = DEADBAND_MIN_STEP_METERS,
+    ): Double {
+        val smoothed = smooth(points)
+        if (smoothed.size < 2) return 0.0
+        var total = 0.0
+        var anchor = smoothed.first()
+        for (i in 1 until smoothed.size) {
+            val p = smoothed[i]
+            val d = haversineMeters(anchor.lat, anchor.lon, p.lat, p.lon)
+            if (d >= minStepMeters) {
+                total += d
+                anchor = p
+            }
+        }
+        return total
     }
 
     private fun perpendicularDistanceMeters(

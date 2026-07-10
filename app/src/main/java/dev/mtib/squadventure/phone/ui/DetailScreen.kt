@@ -102,12 +102,13 @@ fun DetailScreen(
                 CircularProgressIndicator()
             }
         } else {
+            val displayPoints = remember(state.points) { dev.mtib.squadventure.core.geo.Geo.smooth(state.points) }
             Column(Modifier.fillMaxSize().padding(padding)) {
                 MapView(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     claims = state.claims,
-                    routes = listOf(state.points),
-                    fitPoints = state.points,
+                    routes = listOf(displayPoints),
+                    fitPoints = displayPoints,
                     showSquares = true,
                 )
                 Column(Modifier.padding(16.dp)) {

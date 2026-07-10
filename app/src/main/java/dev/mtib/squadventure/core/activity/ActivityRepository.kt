@@ -55,7 +55,7 @@ class ActivityRepository(context: Context) {
     private fun migrate(meta: ActivityMeta): ActivityMeta {
         val points = loadPoints(meta.id)
         val migrated = meta.copy(
-            distanceMeters = Geo.pathLengthMeters(Geo.simplify(points, SIMPLIFY_EPSILON_METERS)),
+            distanceMeters = Geo.denoisedDistanceMeters(points),
             geometryHash = Gpx.geometryHash(points),
             schemaVersion = CURRENT_SCHEMA,
         )
@@ -68,6 +68,10 @@ class ActivityRepository(context: Context) {
         if (!f.exists()) return emptyList()
         return f.inputStream().use { Gpx.parse(it) }.flatMap { it.points }
     }
+
+    /** Points smoothed for display (map trail / heatmap), with GPS jitter and spikes removed. The
+     * stored track ([loadPoints] / [gpxFile]) stays raw for export fidelity. */
+    fun loadDisplayPoints(id: String): List<TrackPoint> = Geo.smooth(loadPoints(id))
 
     fun loadSquadratinhoKeys(id: String): Set<Long> {
         val f = File(dir(id), SQUARES)
@@ -215,7 +219,7 @@ class ActivityRepository(context: Context) {
             transportMode = mode,
             source = source,
             title = title,
-            distanceMeters = Geo.pathLengthMeters(Geo.simplify(points, SIMPLIFY_EPSILON_METERS)),
+            distanceMeters = Geo.denoisedDistanceMeters(points),
             durationMs = if (timed.size >= 2) timed.max() - timed.min() else 0L,
             pointCount = points.size,
             squadratCount = squadrats.size,
@@ -247,10 +251,9 @@ class ActivityRepository(context: Context) {
         private const val META = "meta.json"
         private const val SQUARES = "squares.json"
 
-        /** Bumped whenever a derived-stat computation changes; drives lazy [readMeta] migration. */
-        const val CURRENT_SCHEMA = 1
-
-        /** Douglas–Peucker tolerance for denoising raw GPS jitter before summing distance. */
-        private const val SIMPLIFY_EPSILON_METERS = 5.0
+        /** Bumped whenever a derived-stat computation changes; drives lazy [readMeta] migration.
+         * v2: distance switched from Douglas–Peucker length to [Geo.denoisedDistanceMeters] (median
+         * smoothing + movement dead-band) so noisy GPS no longer inflates it. */
+        const val CURRENT_SCHEMA = 2
     }
 }

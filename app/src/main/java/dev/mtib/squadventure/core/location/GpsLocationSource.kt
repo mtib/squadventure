@@ -19,6 +19,7 @@ class GpsLocationSource(
     context: Context,
     private val minTimeMs: Long = 1_000L,
     private val minDistanceMeters: Float = 4f,
+    private val maxAccuracyMeters: Float = 35f,
 ) : LocationSource {
 
     private val manager =
@@ -31,14 +32,21 @@ class GpsLocationSource(
         stop()
         val providers = candidateProviders().filter { manager.isProviderEnabled(it) }
 
-        recentLastKnown(providers)?.let { onFix(it.toTrackPoint()) }
+        recentLastKnown(providers)?.takeIf { it.isAccurateEnough() }?.let { onFix(it.toTrackPoint()) }
 
         for (provider in providers) {
-            val listener = LocationListener { location -> onFix(location.toTrackPoint()) }
+            val listener = LocationListener { location ->
+                if (location.isAccurateEnough()) onFix(location.toTrackPoint())
+            }
             manager.requestLocationUpdates(provider, minTimeMs, minDistanceMeters, listener, Looper.getMainLooper())
             active.add(listener)
         }
     }
+
+    /** Drop fixes whose reported horizontal accuracy is worse than [maxAccuracyMeters]; these are
+     * the multipath/cold-start outliers that otherwise show up as teleport spikes in the track.
+     * Fixes without an accuracy estimate are kept (better a point than none). */
+    private fun Location.isAccurateEnough(): Boolean = !hasAccuracy() || accuracy <= maxAccuracyMeters
 
     override fun stop() {
         active.forEach { manager.removeUpdates(it) }

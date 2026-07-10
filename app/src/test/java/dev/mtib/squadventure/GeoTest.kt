@@ -86,6 +86,65 @@ class GeoTest {
         )
     }
 
+    /** A spread of [count] fixes within ~[radiusMeters] of one spot — a stationary noisy receiver. */
+    private fun stationaryCloud(baseLat: Double, baseLon: Double, radiusMeters: Double, count: Int): List<TrackPoint> {
+        val cosLat = cos(Math.toRadians(baseLat))
+        return (0 until count).map { i ->
+            val angle = i * 2.3999632
+            val r = radiusMeters * (0.5 + 0.5 * sin(i * 1.7))
+            val dx = r * cos(angle)
+            val dy = r * sin(angle)
+            val lat = baseLat + Math.toDegrees(dy / earthRadiusMeters)
+            val lon = baseLon + Math.toDegrees(dx / (earthRadiusMeters * cosLat))
+            TrackPoint(lat, lon, timeMs = i * 1000L)
+        }
+    }
+
+    @Test
+    fun denoised_distance_collapses_a_stationary_jitter_cloud() {
+        val cloud = stationaryCloud(baseLat = 52.0, baseLon = 13.0, radiusMeters = 6.0, count = 300)
+        val raw = Geo.pathLengthMeters(cloud)
+        assertTrue("raw stationary noise should read as hundreds of metres (was $raw)", raw > 300.0)
+
+        val denoised = Geo.denoisedDistanceMeters(cloud)
+        assertTrue("stationary cloud should denoise to ~0 (was $denoised)", denoised < 30.0)
+    }
+
+    @Test
+    fun denoised_distance_removes_a_teleport_spike() {
+        val clean = jitteryStraightLine(baseLat = 52.0, lonSpanDegrees = 0.05, steps = 200, jitterMeters = 1.0).toMutableList()
+        val straight = Geo.haversineMeters(clean.first().lat, clean.first().lon, clean.last().lat, clean.last().lon)
+        val mid = clean.size / 2
+        clean[mid] = clean[mid].copy(lat = clean[mid].lat + Math.toDegrees(500.0 / earthRadiusMeters))
+        val rawWithSpike = Geo.pathLengthMeters(clean)
+        assertTrue("spike should inflate raw length badly (was $rawWithSpike vs $straight)", rawWithSpike > straight + 800.0)
+
+        val denoised = Geo.denoisedDistanceMeters(clean)
+        assertTrue(
+            "denoised length ($denoised) should be close to the straight distance ($straight)",
+            abs(denoised - straight) < straight * 0.15,
+        )
+    }
+
+    @Test
+    fun denoised_distance_preserves_genuine_movement() {
+        val line = jitteryStraightLine(baseLat = 52.0, lonSpanDegrees = 0.05, steps = 200, jitterMeters = 1.0)
+        val straight = Geo.haversineMeters(line.first().lat, line.first().lon, line.last().lat, line.last().lon)
+        val denoised = Geo.denoisedDistanceMeters(line)
+        assertTrue(
+            "denoised straight walk ($denoised) should stay within a few % of the true distance ($straight)",
+            abs(denoised - straight) < straight * 0.05,
+        )
+    }
+
+    @Test
+    fun smooth_preserves_point_count_and_is_noop_for_short_tracks() {
+        val line = jitteryStraightLine(baseLat = 52.0, lonSpanDegrees = 0.02, steps = 50, jitterMeters = 3.0)
+        assertEquals(line.size, Geo.smooth(line).size)
+        val two = listOf(TrackPoint(1.0, 2.0), TrackPoint(1.1, 2.1))
+        assertEquals(two, Geo.smooth(two))
+    }
+
     @Test
     fun simplify_is_a_noop_for_two_or_fewer_points() {
         assertEquals(emptyList<TrackPoint>(), Geo.simplify(emptyList(), 5.0))

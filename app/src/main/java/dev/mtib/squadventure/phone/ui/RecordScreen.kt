@@ -70,7 +70,7 @@ fun RecordScreen() {
             val repo = ActivityRepository(context)
             val squadratinhos = repo.allSquadratinhoKeys(setOf(selectedMode))
             val squadrats = TileClaims.squadratsFromSquadratinhos(squadratinhos)
-            val routes = repo.list().filter { it.transportMode == selectedMode }.map { repo.loadPoints(it.id) }
+            val routes = repo.list().filter { it.transportMode == selectedMode }.map { repo.loadDisplayPoints(it.id) }
             modeClaims = MapClaims(squadrats = squadrats, squadratinhos = squadratinhos)
             modeRoutes = routes
         }

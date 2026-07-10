@@ -60,7 +60,7 @@ put Android-free logic under `core/` and test it.
 ```
 core/                       platform-agnostic, JVM-unit-tested
   geo/SlippyTile            OSM tile math: lat/lon<->tile at z14/z17, per-latitude sizes, packed Long keys
-  geo/Geo                   haversine distance / path length
+  geo/Geo                   haversine, path length, median smoothing + dead-band denoisedDistanceMeters
   geo/TileClaims            point stream -> claimed squadrat/squadratinho sets
   geo/WebMercator           normalized [0,1]^2 world projection shared by tiles + the map canvas
   metrics/SquareMetrics     total, yard (largest 4-connected cluster), übersquare (largest solid NxN)
@@ -88,6 +88,14 @@ no IPC. Persistence is plain files + `kotlinx.serialization` (no Room/DataStore)
   "1 mile" / "200 m".
 - **Yard** = largest 4-connected cluster; **Übersquadrat** = largest solid N×N block.
 - Heatmap = **trail density of actual GPX paths** (Strava-style), not per-square counts. Toggle-able.
+- **Distance must be denoised, not Douglas–Peucker'd.** Noisy consumer GPS (e.g. a stationary
+  phone) inflates raw path length massively; DP does *not* fix it (jitter zigzags deviate from the
+  chord and survive). Distance goes through `Geo.denoisedDistanceMeters` (median smoothing +
+  movement dead-band, `SMOOTH_WINDOW`/`DEADBAND_MIN_STEP_METERS`); the live counter in
+  `TrackingController` uses the same dead-band; `GpsLocationSource` drops fixes worse than
+  `maxAccuracyMeters`. Changing the distance formula requires bumping `ActivityRepository`'s
+  `CURRENT_SCHEMA` so stored activities re-derive on next read. The stored `track.gpx` stays raw
+  (export fidelity); only derived stats/display are cleaned (`loadDisplayPoints`).
 
 ## Naming: user-facing vs internal
 Internal code keeps the precise domain names `squadrat` (z14) and `squadratinho` (z17). **User-facing
