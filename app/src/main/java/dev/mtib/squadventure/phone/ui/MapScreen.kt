@@ -20,16 +20,19 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.mtib.squadventure.R
 import dev.mtib.squadventure.core.model.TrackPoint
@@ -42,7 +45,16 @@ fun MapScreen(viewModel: MapViewModel = viewModel()) {
     // Read once so the map opens centered/zoomed on the user; null (no permission/fix) falls back to world view.
     val currentLocation = remember { lastKnownLocation(context) }
 
-    LaunchedEffect(Unit) { viewModel.refresh() }
+    // Refresh whenever the Map destination resumes (e.g. after recording/importing on another tab),
+    // so new squares and paths appear without reopening the app or toggling filters.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Box(Modifier.fillMaxSize()) {
         MapView(

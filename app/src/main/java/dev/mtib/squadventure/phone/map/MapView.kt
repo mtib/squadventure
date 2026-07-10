@@ -9,9 +9,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -23,24 +24,29 @@ import dev.mtib.squadventure.core.model.TrackPoint
 import dev.mtib.squadventure.phone.ui.Squadrat
 import dev.mtib.squadventure.phone.ui.Squadratinho
 import dev.mtib.squadventure.phone.ui.Trail
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
-import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
-import org.maplibre.android.style.layers.HeatmapLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.layers.RasterLayer
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.android.style.sources.ImageSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
 import org.maplibre.geojson.Polygon
+import java.util.concurrent.atomic.AtomicReference
 import org.maplibre.android.maps.MapView as NativeMapView
 
 /** Claimed squares to overlay: [squadratinhos] (z17) and [squadrats] (z14), as packed tile keys. */
@@ -81,6 +87,8 @@ fun MapView(
     var maplibreMap by remember { mutableStateOf<MapLibreMap?>(null) }
     var style by remember { mutableStateOf<Style?>(null) }
     var cameraInitialized by remember { mutableStateOf(false) }
+    val heatmapScope = rememberCoroutineScope()
+    val heatmapJob = remember { AtomicReference<Job?>(null) }
 
     AndroidView(
         modifier = modifier.fillMaxSize(),
@@ -102,12 +110,38 @@ fun MapView(
         }
     }
 
+    /** Always reads the latest [maplibreMap]/[style]/[routes]/[showHeatmap] even when invoked
+     * later from the long-lived camera-idle listener registered below. */
+    val refreshHeatmap = rememberUpdatedState {
+        val map = maplibreMap
+        val loadedStyle = style
+        if (map == null || loadedStyle == null || !showHeatmap) return@rememberUpdatedState
+        val visibleRoutes = routes
+        val bounds = map.projection.visibleRegion.latLngBounds
+        heatmapJob.get()?.cancel()
+        heatmapJob.set(
+            heatmapScope.launch {
+                val raster = withContext(Dispatchers.Default) { HeatmapRenderer.render(bounds, visibleRoutes) }
+                if (raster != null) applyHeatmapRaster(loadedStyle, raster)
+            },
+        )
+    }
+
+    DisposableEffect(maplibreMap) {
+        val map = maplibreMap
+        if (map == null) return@DisposableEffect onDispose {}
+        val listener = MapLibreMap.OnCameraIdleListener { refreshHeatmap.value() }
+        map.addOnCameraIdleListener(listener)
+        onDispose { map.removeOnCameraIdleListener(listener) }
+    }
+
     LaunchedEffect(style, claims, routes, showHeatmap, showSquares, currentLocation) {
         val loadedStyle = style ?: return@LaunchedEffect
         ensureOverlayLayers(loadedStyle)
         updateSquareLayers(loadedStyle, claims, showSquares)
         updateTrailLayers(loadedStyle, routes, showHeatmap)
         updateCurrentLocationLayer(loadedStyle, currentLocation)
+        if (showHeatmap) refreshHeatmap.value()
     }
 }
 
@@ -184,22 +218,19 @@ private object MapAssets {
 }
 private const val WORLD_ZOOM = 1.0
 private const val FOCUS_ZOOM = 14.0
-private const val HEATMAP_RADIUS_PX = 18f
-private const val HEATMAP_INTENSITY = 1f
-private const val HEATMAP_OPACITY = 0.7f
 private const val ROUTE_LINE_WIDTH_PX = 4f
 private const val CURRENT_LOCATION_RADIUS_PX = 7f
 private const val CURRENT_LOCATION_STROKE_WIDTH_PX = 2f
 
 private const val SOURCE_SQUADRATS = "squadventure-squadrats"
 private const val SOURCE_SQUADRATINHOS = "squadventure-squadratinhos"
-private const val SOURCE_HEATMAP = "squadventure-heatmap"
+private const val SOURCE_HEATMAP_IMAGE = "squadventure-heat-img"
 private const val SOURCE_ROUTE = "squadventure-route"
 private const val SOURCE_CURRENT_LOCATION = "squadventure-current-location"
 
 private const val LAYER_SQUADRATS = "squadventure-squadrats-fill"
 private const val LAYER_SQUADRATINHOS = "squadventure-squadratinhos-fill"
-private const val LAYER_HEATMAP = "squadventure-heatmap"
+private const val LAYER_HEATMAP_RASTER = "squadventure-heat-img-layer"
 private const val LAYER_ROUTE = "squadventure-route"
 private const val LAYER_CURRENT_LOCATION = "squadventure-current-location"
 
@@ -229,17 +260,6 @@ private fun ensureOverlayLayers(style: Style) {
             ),
         )
     }
-    if (style.getSource(SOURCE_HEATMAP) == null) {
-        style.addSource(GeoJsonSource(SOURCE_HEATMAP))
-        style.addLayer(
-            HeatmapLayer(LAYER_HEATMAP, SOURCE_HEATMAP).withProperties(
-                PropertyFactory.heatmapRadius(HEATMAP_RADIUS_PX),
-                PropertyFactory.heatmapIntensity(HEATMAP_INTENSITY),
-                PropertyFactory.heatmapOpacity(HEATMAP_OPACITY),
-                PropertyFactory.heatmapColor(heatmapColorRamp()),
-            ),
-        )
-    }
     if (style.getSource(SOURCE_ROUTE) == null) {
         style.addSource(GeoJsonSource(SOURCE_ROUTE))
         style.addLayer(
@@ -264,22 +284,6 @@ private fun ensureOverlayLayers(style: Style) {
     }
 }
 
-/** transparent -> Trail (cool, low density) -> Squadratinho (warm, high density). */
-private fun heatmapColorRamp(): Expression {
-    val trail = channelBytes(Trail)
-    val hot = channelBytes(Squadratinho)
-    return Expression.interpolate(
-        Expression.linear(),
-        Expression.heatmapDensity(),
-        Expression.stop(0f, Expression.rgba(trail.first, trail.second, trail.third, 0f)),
-        Expression.stop(0.5f, Expression.rgba(trail.first, trail.second, trail.third, 0.7f)),
-        Expression.stop(1f, Expression.rgba(hot.first, hot.second, hot.third, 1f)),
-    )
-}
-
-private fun channelBytes(color: Color): Triple<Float, Float, Float> =
-    Triple(color.red * 255f, color.green * 255f, color.blue * 255f)
-
 private fun updateSquareLayers(style: Style, claims: MapClaims, showSquares: Boolean) {
     val visibility = PropertyFactory.visibility(if (showSquares) Property.VISIBLE else Property.NONE)
     style.getLayerAs<FillLayer>(LAYER_SQUADRATS)?.setProperties(visibility)
@@ -291,14 +295,36 @@ private fun updateSquareLayers(style: Style, claims: MapClaims, showSquares: Boo
 }
 
 private fun updateTrailLayers(style: Style, routes: List<List<TrackPoint>>, showHeatmap: Boolean) {
-    style.getLayerAs<HeatmapLayer>(LAYER_HEATMAP)
-        ?.setProperties(PropertyFactory.visibility(if (showHeatmap) Property.VISIBLE else Property.NONE))
     style.getLayerAs<LineLayer>(LAYER_ROUTE)
         ?.setProperties(PropertyFactory.visibility(if (showHeatmap) Property.NONE else Property.VISIBLE))
-    if (showHeatmap) {
-        style.getSourceAs<GeoJsonSource>(SOURCE_HEATMAP)?.setGeoJson(heatmapFeatureCollection(routes))
-    } else {
+    style.getLayerAs<RasterLayer>(LAYER_HEATMAP_RASTER)
+        ?.setProperties(PropertyFactory.visibility(if (showHeatmap) Property.VISIBLE else Property.NONE))
+    if (!showHeatmap) {
         style.getSourceAs<GeoJsonSource>(SOURCE_ROUTE)?.setGeoJson(routeFeatureCollection(routes))
+    }
+}
+
+/**
+ * Creates the `ImageSource`/[RasterLayer] pair on first render (inserted below [LAYER_ROUTE], i.e.
+ * above the squares and below the route/current-location layers) or, if already present, swaps
+ * the bitmap and re-anchors its geo quad in place.
+ */
+private fun applyHeatmapRaster(style: Style, raster: HeatmapRaster) {
+    val existingSource = style.getSourceAs<ImageSource>(SOURCE_HEATMAP_IMAGE)
+    if (existingSource != null) {
+        existingSource.setImage(raster.bitmap)
+        existingSource.setCoordinates(raster.quad)
+        return
+    }
+    style.addSource(ImageSource(SOURCE_HEATMAP_IMAGE, raster.quad, raster.bitmap))
+    if (style.getLayer(LAYER_HEATMAP_RASTER) == null) {
+        style.addLayerBelow(
+            RasterLayer(LAYER_HEATMAP_RASTER, SOURCE_HEATMAP_IMAGE).withProperties(
+                PropertyFactory.visibility(Property.VISIBLE),
+                PropertyFactory.rasterOpacity(1f),
+            ),
+            LAYER_ROUTE,
+        )
     }
 }
 
@@ -329,11 +355,6 @@ private fun tilePolygon(x: Int, y: Int, zoom: Int): Polygon {
 private fun routeFeatureCollection(routes: List<List<TrackPoint>>): FeatureCollection {
     val features = routes.filter { it.size >= 2 }
         .map { points -> Feature.fromGeometry(LineString.fromLngLats(points.map { Point.fromLngLat(it.lon, it.lat) })) }
-    return FeatureCollection.fromFeatures(features)
-}
-
-private fun heatmapFeatureCollection(routes: List<List<TrackPoint>>): FeatureCollection {
-    val features = routes.asSequence().flatten().map { Feature.fromGeometry(Point.fromLngLat(it.lon, it.lat)) }.toList()
     return FeatureCollection.fromFeatures(features)
 }
 
