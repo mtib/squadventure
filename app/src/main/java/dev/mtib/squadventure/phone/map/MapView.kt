@@ -268,6 +268,7 @@ private const val LAYER_SQUADRATINHOS = "squadventure-squadratinhos-fill"
 private const val LAYER_YARD = "squadventure-yard-fill"
 private const val LAYER_SQUADRATS_EDGE = "squadventure-squadrats-edge"
 private const val LAYER_SQUADRATINHOS_EDGE = "squadventure-squadratinhos-edge"
+private const val LAYER_UBER_FILL = "squadventure-uber-fill"
 private const val LAYER_UBER = "squadventure-uber-line"
 private const val LAYER_HEATMAP_RASTER = "squadventure-heat-img-layer"
 private const val LAYER_ROUTE = "squadventure-route"
@@ -343,7 +344,14 @@ private fun ensureOverlayLayers(style: Style) {
         )
     }
     if (style.getSource(SOURCE_UBER) == null) {
+        // Source holds one bounding-rectangle polygon per level (not per tile), so the outline is
+        // only the block's outer edge and the fill is a single wash over the whole block.
         style.addSource(GeoJsonSource(SOURCE_UBER))
+        style.addLayer(
+            FillLayer(LAYER_UBER_FILL, SOURCE_UBER).withProperties(
+                PropertyFactory.fillColor(android.graphics.Color.argb(38, 255, 255, 255)),
+            ),
+        )
         style.addLayer(
             LineLayer(LAYER_UBER, SOURCE_UBER).withProperties(
                 PropertyFactory.lineColor(android.graphics.Color.argb(230, 255, 255, 255)),
@@ -405,11 +413,47 @@ private fun updateHighlightLayers(style: Style, claims: MapClaims, showSquares: 
     if (!style.isFullyLoaded) return
     val visibility = PropertyFactory.visibility(if (showSquares) Property.VISIBLE else Property.NONE)
     style.getLayerAs<FillLayer>(LAYER_YARD)?.setProperties(visibility)
+    style.getLayerAs<FillLayer>(LAYER_UBER_FILL)?.setProperties(visibility)
     style.getLayerAs<LineLayer>(LAYER_UBER)?.setProperties(visibility)
     style.getSourceAs<GeoJsonSource>(SOURCE_YARD)
         ?.setGeoJson(combinedTileFeatureCollection(claims.yardSquadrats, claims.yardSquadratinhos))
     style.getSourceAs<GeoJsonSource>(SOURCE_UBER)
-        ?.setGeoJson(combinedTileFeatureCollection(claims.uberSquadrats, claims.uberSquadratinhos))
+        ?.setGeoJson(uberOutlineFeatureCollection(claims.uberSquadrats, claims.uberSquadratinhos))
+}
+
+/** One bounding-rectangle polygon per level for the solid übersquare blocks (outline = outer edge only). */
+private fun uberOutlineFeatureCollection(squadratKeys: Set<Long>, squadratinhoKeys: Set<Long>): FeatureCollection {
+    val features = ArrayList<Feature>(2)
+    boundingBoxPolygon(squadratKeys, SlippyTile.ZOOM_SQUADRAT)?.let { features.add(Feature.fromGeometry(it)) }
+    boundingBoxPolygon(squadratinhoKeys, SlippyTile.ZOOM_SQUADRATINHO)?.let { features.add(Feature.fromGeometry(it)) }
+    return FeatureCollection.fromFeatures(features)
+}
+
+/** The outer rectangle enclosing [keys] at [zoom] (the übersquare is solid, so this is its exact shape). */
+private fun boundingBoxPolygon(keys: Set<Long>, zoom: Int): Polygon? {
+    if (keys.isEmpty()) return null
+    var minX = Int.MAX_VALUE
+    var minY = Int.MAX_VALUE
+    var maxX = Int.MIN_VALUE
+    var maxY = Int.MIN_VALUE
+    for (k in keys) {
+        val x = SlippyTile.keyX(k)
+        val y = SlippyTile.keyY(k)
+        if (x < minX) minX = x
+        if (y < minY) minY = y
+        if (x > maxX) maxX = x
+        if (y > maxY) maxY = y
+    }
+    val nw = SlippyTile.tileNorthWest(minX, minY, zoom)
+    val se = SlippyTile.tileNorthWest(maxX + 1, maxY + 1, zoom)
+    val ring = listOf(
+        Point.fromLngLat(nw[1], nw[0]),
+        Point.fromLngLat(se[1], nw[0]),
+        Point.fromLngLat(se[1], se[0]),
+        Point.fromLngLat(nw[1], se[0]),
+        Point.fromLngLat(nw[1], nw[0]),
+    )
+    return Polygon.fromLngLats(listOf(ring))
 }
 
 private fun updateTrailLayers(style: Style, routes: List<List<TrackPoint>>, showHeatmap: Boolean) {
