@@ -145,7 +145,8 @@ class ActivityRepository(context: Context) {
      * [Gpx.geometryHash] (same route, e.g. an old copy that lost its timestamps), it is upgraded in
      * place — new track/squares/stats are written but its id, transport mode and title are kept —
      * and [ImportResult.Updated] is returned. Otherwise a new activity is saved as
-     * [ImportResult.Added], defaulting to [TransportMode.OTHER]; the user can re-tag afterwards.
+     * [ImportResult.Added] with its transport mode guessed from the speed profile ([ModeGuess]);
+     * the user can re-tag afterwards.
      */
     fun import(
         id: String,
@@ -163,7 +164,10 @@ class ActivityRepository(context: Context) {
         if (upgradeId != null) {
             return ImportResult.Updated(upgrade(upgradeId, points))
         }
-        val meta = save(id, createdAt, points, TransportMode.OTHER, ActivitySource.IMPORTED, title)
+        val timed = points.mapNotNull { it.timeMs }
+        val durationMs = if (timed.size >= 2) timed.max() - timed.min() else 0L
+        val mode = ModeGuess.guess(Geo.denoisedDistanceMeters(points), durationMs, points)
+        val meta = save(id, createdAt, points, mode, ActivitySource.IMPORTED, title)
         return ImportResult.Added(meta)
     }
 

@@ -66,6 +66,7 @@ core/                       platform-agnostic, JVM-unit-tested
   metrics/SquareMetrics     total, yard (largest 4-connected cluster), übersquare (largest solid NxN)
   model/                    TransportMode, TrackPoint, ActivityMeta/Record, ActivitySource
   gpx/Gpx                   GPX read (multi-<trk>) / write / stable content hash for dedup
+  activity/ModeGuess        guesses walk/bike/car from an import's distance/duration/cruising speed (boat not guessed — no cheap offline water test)
   activity/ActivityRepository   filesDir/activities/<id>/{track.gpx, meta.json, squares.json}
   tracking/TrackingController    singleton StateFlows: isTracking, elapsedMs, distanceMeters, path, liveSquares
   location/LocationSource        interface + GpsLocationSource (LocationManager); fakeable in tests
