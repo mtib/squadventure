@@ -79,7 +79,7 @@ fun MapScreen(viewModel: MapViewModel = viewModel()) {
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            TransportModeChips(selected = state.filter, onSelect = viewModel::setFilter, showAll = true)
+            TransportModeFilterChips(selected = state.filter, onToggle = viewModel::toggleFilter)
             Surface(shape = MaterialTheme.shapes.large, tonalElevation = 3.dp) {
                 Row(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),

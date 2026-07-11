@@ -14,7 +14,6 @@
     <string name="mode_car">Auto</string>
     <string name="mode_boat">Boot</string>
     <string name="mode_other">Andere</string>
-    <string name="filter_all">Alle</string>
 
     <!-- Map -->
     <string name="map_heatmap">Heatmap</string>

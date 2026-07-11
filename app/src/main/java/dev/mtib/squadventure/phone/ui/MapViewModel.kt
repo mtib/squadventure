@@ -19,7 +19,8 @@ data class MapUiState(
     val claims: MapClaims = MapClaims(),
     val routes: List<List<TrackPoint>> = emptyList(),
     val showHeatmap: Boolean = true,
-    val filter: TransportMode? = null,
+    /** Modes to show; empty means no filter (all modes). */
+    val filter: Set<TransportMode> = emptySet(),
     val loading: Boolean = true,
     val yard: Int = 0,
     val miniYard: Int = 0,
@@ -35,8 +36,9 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(MapUiState())
     val state: StateFlow<MapUiState> = _state.asStateFlow()
 
-    fun setFilter(mode: TransportMode?) {
-        _state.value = _state.value.copy(filter = mode)
+    fun toggleFilter(mode: TransportMode) {
+        val current = _state.value.filter
+        _state.value = _state.value.copy(filter = if (mode in current) current - mode else current + mode)
         refresh()
     }
 
@@ -50,7 +52,7 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
         val showHeatmap = _state.value.showHeatmap
         viewModelScope.launch(Dispatchers.IO) {
             _state.value = _state.value.copy(loading = true)
-            val modes = filter?.let { setOf(it) }
+            val modes = filter.takeIf { it.isNotEmpty() }
             val squadratinhos = repo.allSquadratinhoKeys(modes)
             val squadrats = TileClaims.squadratsFromSquadratinhos(squadratinhos)
             val bigStats = SquareMetrics.stats(squadrats)

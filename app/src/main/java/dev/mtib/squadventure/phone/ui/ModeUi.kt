@@ -38,28 +38,46 @@ fun TransportMode.labelRes(): Int = when (this) {
     TransportMode.OTHER -> R.string.mode_other
 }
 
-/** Selectable [TransportMode] chips, with an optional leading "All" chip (`selected == null`). */
+/** Single-select [TransportMode] chips (e.g. picking the mode to record in). */
 @Composable
 fun TransportModeChips(
     selected: TransportMode?,
     onSelect: (TransportMode?) -> Unit,
-    showAll: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     LazyRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (showAll) {
-            item {
-                FilterChip(
-                    selected = selected == null,
-                    onClick = { onSelect(null) },
-                    label = { Text(stringResource(R.string.filter_all)) },
-                )
-            }
-        }
         items(TransportMode.entries) { mode ->
             FilterChip(
                 selected = selected == mode,
                 onClick = { onSelect(mode) },
+                label = { Text(stringResource(mode.labelRes())) },
+                leadingIcon = {
+                    Icon(
+                        mode.icon(),
+                        contentDescription = null,
+                        modifier = Modifier.size(FilterChipDefaults.IconSize),
+                    )
+                },
+            )
+        }
+    }
+}
+
+/**
+ * Multi-select [TransportMode] filter chips. An empty [selected] set means "no filter" (show all);
+ * tapping a chip toggles it, so selecting one or more narrows to exactly those modes.
+ */
+@Composable
+fun TransportModeFilterChips(
+    selected: Set<TransportMode>,
+    onToggle: (TransportMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(TransportMode.entries) { mode ->
+            FilterChip(
+                selected = mode in selected,
+                onClick = { onToggle(mode) },
                 label = { Text(stringResource(mode.labelRes())) },
                 leadingIcon = {
                     Icon(
