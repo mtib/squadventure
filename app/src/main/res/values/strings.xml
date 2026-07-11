@@ -48,6 +48,7 @@
     <!-- History -->
     <string name="history_empty">No activities yet. Record one or import a GPX file.</string>
     <string name="history_import">Import GPX</string>
+    <string name="download_latest">Download latest version</string>
 
     <!-- Detail -->
     <string name="detail_export">Export GPX</string>

@@ -1,5 +1,8 @@
 package dev.mtib.squadventure.phone.ui
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,6 +31,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -35,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -42,6 +48,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.mtib.squadventure.R
 import dev.mtib.squadventure.core.model.ActivityMeta
 import kotlinx.coroutines.launch
+
+/** Latest signed APK, stable path (see .github/workflows/release.yml). Opened in the browser so the
+ * app itself never touches the network — it stays offline / INTERNET-permission-free. */
+private const val LATEST_RELEASE_APK_URL =
+    "https://github.com/mtib/squadventure/releases/latest/download/squadventure.apk"
+
+private fun openLatestRelease(context: Context) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(LATEST_RELEASE_APK_URL))
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,28 +101,40 @@ fun HistoryScreen(
             )
         },
     ) { padding ->
-        when {
-            loading && activities.isEmpty() -> {
-                Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+        val context = LocalContext.current
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = { openLatestRelease(context) }) {
+                    Icon(Icons.Filled.SystemUpdate, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.download_latest))
                 }
             }
-            activities.isEmpty() -> {
-                Box(
-                    Modifier.fillMaxSize().padding(padding).padding(32.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(stringResource(R.string.history_empty), textAlign = TextAlign.Center)
-                }
-            }
-            else -> {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(padding),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(activities, key = { it.id }) { meta ->
-                        HistoryRow(meta = meta, onClick = { onOpenDetail(meta.id) })
+            Box(Modifier.fillMaxSize()) {
+                when {
+                    loading && activities.isEmpty() -> {
+                        CircularProgressIndicator(Modifier.align(Alignment.Center))
+                    }
+                    activities.isEmpty() -> {
+                        Text(
+                            stringResource(R.string.history_empty),
+                            modifier = Modifier.align(Alignment.Center).padding(32.dp),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(activities, key = { it.id }) { meta ->
+                                HistoryRow(meta = meta, onClick = { onOpenDetail(meta.id) })
+                            }
+                        }
                     }
                 }
             }

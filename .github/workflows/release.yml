@@ -67,6 +67,9 @@ jobs:
         run: |
           mkdir -p out
           cp app/build/outputs/apk/release/app-release.apk "out/squadventure-${TAG}.apk"
+          # Stable-named copy so the in-app "download latest" button can link to a fixed path:
+          # https://github.com/mtib/squadventure/releases/latest/download/squadventure.apk
+          cp app/build/outputs/apk/release/app-release.apk "out/squadventure.apk"
           ls -lh out
 
       - name: Publish release

@@ -48,6 +48,7 @@
     <!-- History -->
     <string name="history_empty">Noch keine Aktivitäten. Nimm eine auf oder importiere eine GPX-Datei.</string>
     <string name="history_import">GPX importieren</string>
+    <string name="download_latest">Neueste Version herunterladen</string>
 
     <!-- Detail -->
     <string name="detail_export">GPX exportieren</string>

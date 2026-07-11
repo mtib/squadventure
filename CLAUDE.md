@@ -29,7 +29,10 @@ internally gzip'd, so the APK stores it uncompressed (`noCompress += "pmtiles"`)
 nothing. App data (claimed squares, routes,
 heatmap, current-location marker) is drawn as MapLibre runtime GeoJSON sources/layers on top; see
 `phone/map/MapView.kt`. Location comes from `LocationManager` (GPS), **not** Play Services (which
-is a networked dependency).
+is a networked dependency). The History screen's "download latest version" button only fires an
+`ACTION_VIEW` intent at the GitHub release APK (`releases/latest/download/squadventure.apk`, a
+stable-named asset CI uploads alongside the versioned one) — the *browser* does the networking; the
+app opens no socket, so this keeps the no-`INTERNET` guarantee.
 
 ## Stack / versions (source of truth: `app/build.gradle.kts`, `gradle/wrapper`)
 - Kotlin **2.2.10**, Jetpack **Compose** (BOM 2024.10.01), AGP **8.7.3**, Gradle **8.11.1**.
