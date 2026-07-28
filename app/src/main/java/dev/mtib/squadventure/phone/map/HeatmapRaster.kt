@@ -1,6 +1,7 @@
 package dev.mtib.squadventure.phone.map
 
 import android.graphics.Bitmap
+import dev.mtib.squadventure.core.geo.Geo
 import dev.mtib.squadventure.core.geo.WebMercator
 import dev.mtib.squadventure.core.model.TrackPoint
 import org.maplibre.android.geometry.LatLng
@@ -28,6 +29,9 @@ object HeatmapRenderer {
     private const val STAMP_RADIUS_PX = 2
     private const val BLUR_PASSES = 3
     private const val HEATMAP_MAX_COUNT = 6f
+
+    /** Segments longer than this are gaps (GPS dropout, teleport between activities), not travel. */
+    private const val MAX_SEGMENT_METERS = 50.0
 
     /** Cool ramp aligned to the app palette (Trail blue → Squadrat green → near-white). */
     private val HEAT_STOPS = listOf(
@@ -115,17 +119,21 @@ object HeatmapRenderer {
         val visited = HashSet<Int>()
         var prevPx = Int.MIN_VALUE
         var prevPy = Int.MIN_VALUE
+        var prevPoint: TrackPoint? = null
         for (point in activity) {
             val projected = WebMercator.project(point.lat, point.lon)
             val px = ((projected[0] - mxMin) / (mxMax - mxMin) * w).roundToInt()
             val py = ((projected[1] - myMin) / (myMax - myMin) * h).roundToInt()
-            if (prevPx == Int.MIN_VALUE) {
+            val previous = prevPoint
+            val segmentMeters = previous?.let { Geo.haversineMeters(it.lat, it.lon, point.lat, point.lon) }
+            if (segmentMeters == null || segmentMeters > MAX_SEGMENT_METERS) {
                 stampDisk(count, visited, w, h, px, py, STAMP_RADIUS_PX)
             } else {
                 walkAndStamp(count, visited, w, h, prevPx, prevPy, px, py, STAMP_RADIUS_PX)
             }
             prevPx = px
             prevPy = py
+            prevPoint = point
         }
     }
 
